@@ -216,6 +216,245 @@ function renderDesafioGrid() {
 }
 
 // ==========================================
+// GRAVADOR DE VOZ PARA AUTOAVALIAÇÃO
+// ==========================================
+let mediaRecorder = null;
+let audioStream = null;
+let recordedAudioChunks = [];
+let recordedAudioBlob = null;
+let recordedAudioUrl = null;
+let recordTimerInterval = null;
+let recordSeconds = 0;
+let recordState = 'idle'; // 'idle' | 'recording' | 'recorded'
+let isPlayingRecordedAudio = false;
+
+function resetRecorderUI() {
+  stopActiveRecording();
+  stopActivePlayback();
+
+  if (recordedAudioUrl) {
+    URL.revokeObjectURL(recordedAudioUrl);
+    recordedAudioUrl = null;
+  }
+  recordedAudioBlob = null;
+  recordedAudioChunks = [];
+  recordSeconds = 0;
+  recordState = 'idle';
+
+  const recordBtn = document.getElementById('modal-record-btn');
+  const recordIcon = document.getElementById('record-btn-icon');
+  const recordText = document.getElementById('record-btn-text');
+  const statusLabel = document.getElementById('record-status-label');
+  const rerecordBtn = document.getElementById('modal-rerecord-btn');
+
+  if (recordBtn) {
+    recordBtn.className = "flex-1 py-2.5 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold flex items-center justify-center gap-2 transition active:scale-95 shadow-md";
+  }
+  if (recordIcon) recordIcon.innerText = "🎙️";
+  if (recordText) recordText.innerText = "Gravar Áudio";
+  if (statusLabel) {
+    statusLabel.innerText = "Grave sua fala";
+    statusLabel.className = "text-[10px] font-semibold text-slate-400";
+  }
+  if (rerecordBtn) {
+    rerecordBtn.className = "w-10 h-10 rounded-xl bg-slate-800 text-slate-500 flex items-center justify-center text-xl font-bold transition border border-slate-700/60 opacity-50 cursor-not-allowed shrink-0";
+  }
+}
+
+function handleRecordAction() {
+  if (recordState === 'idle') {
+    startVoiceRecording();
+  } else if (recordState === 'recording') {
+    stopVoiceRecording();
+  } else if (recordState === 'recorded') {
+    togglePlayRecordedAudio();
+  }
+}
+
+async function startVoiceRecording() {
+  try {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      alert("Seu navegador não suporta gravação de áudio direta.");
+      return;
+    }
+
+    audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    
+    // Suporte aos formatos comuns de áudio em navegadores
+    let mimeType = 'audio/webm';
+    if (window.MediaRecorder && MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+      mimeType = 'audio/webm;codecs=opus';
+    } else if (window.MediaRecorder && MediaRecorder.isTypeSupported('audio/mp4')) {
+      mimeType = 'audio/mp4';
+    } else if (window.MediaRecorder && MediaRecorder.isTypeSupported('audio/ogg')) {
+      mimeType = 'audio/ogg';
+    }
+
+    mediaRecorder = new MediaRecorder(audioStream, { mimeType: mimeType });
+    recordedAudioChunks = [];
+
+    mediaRecorder.ondataavailable = (e) => {
+      if (e.data && e.data.size > 0) {
+        recordedAudioChunks.push(e.data);
+      }
+    };
+
+    mediaRecorder.onstop = () => {
+      recordedAudioBlob = new Blob(recordedAudioChunks, { type: mimeType });
+      if (recordedAudioUrl) URL.revokeObjectURL(recordedAudioUrl);
+      recordedAudioUrl = URL.createObjectURL(recordedAudioBlob);
+      
+      const audioEl = document.getElementById('modal-recorded-audio');
+      if (audioEl) {
+        audioEl.src = recordedAudioUrl;
+        audioEl.onended = () => {
+          isPlayingRecordedAudio = false;
+          updateRecordedPlayUI();
+        };
+      }
+
+      if (audioStream) {
+        audioStream.getTracks().forEach(track => track.stop());
+        audioStream = null;
+      }
+
+      recordState = 'recorded';
+      updateRecordedPlayUI();
+    };
+
+    mediaRecorder.start(200);
+    recordState = 'recording';
+    recordSeconds = 0;
+
+    const recordBtn = document.getElementById('modal-record-btn');
+    const recordIcon = document.getElementById('record-btn-icon');
+    const recordText = document.getElementById('record-btn-text');
+    const statusLabel = document.getElementById('record-status-label');
+    const rerecordBtn = document.getElementById('modal-rerecord-btn');
+
+    if (recordBtn) {
+      recordBtn.className = "flex-1 py-2.5 px-3 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold flex items-center justify-center gap-2 transition active:scale-95 shadow-md shadow-rose-600/30 animate-pulse";
+    }
+    if (recordIcon) recordIcon.innerText = "⏹️";
+    if (recordText) recordText.innerText = "Parar Gravação";
+    if (rerecordBtn) {
+      rerecordBtn.className = "w-10 h-10 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-300 flex items-center justify-center text-xl font-bold transition border border-slate-600 active:scale-90 shrink-0";
+    }
+
+    recordTimerInterval = setInterval(() => {
+      recordSeconds++;
+      const mins = Math.floor(recordSeconds / 60);
+      const secs = recordSeconds % 60;
+      if (statusLabel) {
+        statusLabel.innerText = `🔴 Gravando... ${mins}:${secs < 10 ? '0' : ''}${secs}`;
+        statusLabel.className = "text-[10px] font-bold text-rose-400";
+      }
+    }, 1000);
+
+  } catch (err) {
+    console.error("Erro ao acessar microfone:", err);
+    alert("Não foi possível acessar o microfone. Verifique as permissões de áudio do seu navegador.");
+  }
+}
+
+function stopVoiceRecording() {
+  if (recordTimerInterval) {
+    clearInterval(recordTimerInterval);
+    recordTimerInterval = null;
+  }
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    mediaRecorder.stop();
+  }
+}
+
+function updateRecordedPlayUI() {
+  const recordBtn = document.getElementById('modal-record-btn');
+  const recordIcon = document.getElementById('record-btn-icon');
+  const recordText = document.getElementById('record-btn-text');
+  const statusLabel = document.getElementById('record-status-label');
+  const rerecordBtn = document.getElementById('modal-rerecord-btn');
+
+  if (recordBtn) {
+    recordBtn.className = isPlayingRecordedAudio 
+      ? "flex-1 py-2.5 px-3 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold flex items-center justify-center gap-2 transition active:scale-95 shadow-md"
+      : "flex-1 py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center justify-center gap-2 transition active:scale-95 shadow-md";
+  }
+  if (recordIcon) recordIcon.innerText = isPlayingRecordedAudio ? "⏸️" : "▶️";
+  if (recordText) recordText.innerText = isPlayingRecordedAudio ? "Pausar Áudio" : "Ouvir Minha Gravação";
+  
+  if (statusLabel) {
+    statusLabel.innerText = `✓ Gravado (${recordSeconds}s)`;
+    statusLabel.className = "text-[10px] font-bold text-emerald-400";
+  }
+
+  if (rerecordBtn) {
+    rerecordBtn.className = "w-10 h-10 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-200 flex items-center justify-center text-xl font-bold transition border border-slate-600 active:scale-90 shrink-0";
+  }
+}
+
+function togglePlayRecordedAudio() {
+  const audioEl = document.getElementById('modal-recorded-audio');
+  if (!audioEl || !recordedAudioUrl) return;
+
+  if (isPlayingRecordedAudio) {
+    audioEl.pause();
+    isPlayingRecordedAudio = false;
+  } else {
+    audioEl.play().catch(e => console.log('Audio playback error:', e));
+    isPlayingRecordedAudio = true;
+  }
+  updateRecordedPlayUI();
+}
+
+function stopActiveRecording() {
+  if (recordTimerInterval) {
+    clearInterval(recordTimerInterval);
+    recordTimerInterval = null;
+  }
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    try { mediaRecorder.stop(); } catch(e){}
+  }
+  if (audioStream) {
+    audioStream.getTracks().forEach(track => track.stop());
+    audioStream = null;
+  }
+}
+
+function stopActivePlayback() {
+  const audioEl = document.getElementById('modal-recorded-audio');
+  if (audioEl) {
+    audioEl.pause();
+    audioEl.currentTime = 0;
+  }
+  isPlayingRecordedAudio = false;
+}
+
+// ==========================================
+// AVISO E CONFIRMAÇÃO DE REGRAVAR (↺)
+// ==========================================
+function promptResetRecording() {
+  // Se ainda estiver no estado idle, não há gravação para apagar
+  if (recordState === 'idle') {
+    return;
+  }
+  // Abre o modal de aviso
+  const modal = document.getElementById('rerecord-confirm-modal');
+  if (modal) modal.classList.remove('hidden');
+}
+
+function closeRerecordModal() {
+  const modal = document.getElementById('rerecord-confirm-modal');
+  if (modal) modal.classList.add('hidden');
+}
+
+function confirmAndRerecord() {
+  closeRerecordModal();
+  resetRecorderUI();
+  // Inicia automaticamente uma nova gravação limpa
+  startVoiceRecording();
+}
+
+// ==========================================
 // MODAL DO TREINO DO DIA
 // ==========================================
 let activeModalDay = null;
@@ -242,9 +481,8 @@ function openDayModal(dayNumber) {
   // Frase de Treino
   document.getElementById('modal-training-phrase').innerText = `"${data.fraseTreino}"`;
 
-  // Botão de Áudio (Áudio do Usuário ou Síntese de Voz Nativa)
-  const audioBtn = document.getElementById('modal-audio-btn');
-  audioBtn.onclick = () => playTrainingSpeech(data.fraseTreino, data.audioFile);
+  // Resetar gravador de voz para o treino do dia
+  resetRecorderUI();
 
   // Botão de Conclusão
   const completeBtn = document.getElementById('modal-complete-btn');
@@ -268,6 +506,8 @@ function closeDayModal() {
   const modal = document.getElementById('day-modal');
   modal.classList.add('hidden');
   stopWorkoutTimer();
+  stopActiveRecording();
+  stopActivePlayback();
   window.speechSynthesis.cancel();
 }
 

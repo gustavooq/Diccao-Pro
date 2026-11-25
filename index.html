@@ -267,16 +267,45 @@
             </div>
           </div>
 
-          <!-- Ferramentas Rápidas (Áudio + Timer 60s) -->
-          <div class="grid grid-cols-2 gap-2 pt-1">
-            <button id="modal-audio-btn" class="py-2.5 px-3 rounded-xl bg-slate-800 border border-slate-700 hover:bg-slate-700 text-xs font-bold text-slate-200 flex items-center justify-center gap-1.5 transition">
-              <span>🔊</span> <span>Ouvir Dicção</span>
-            </button>
-            <div class="flex items-center gap-2 bg-slate-800 border border-slate-700 px-3 py-2 rounded-xl justify-between">
-              <span id="timer-display" class="text-xs font-black text-indigo-400">60s</span>
-              <button id="timer-btn" onclick="toggleWorkoutTimer()" class="py-1 px-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-bold rounded-lg transition">
-                Iniciar
-              </button>
+          <!-- Ferramentas Rápidas (Gravador de Voz & Timer 60s) -->
+          <div class="space-y-2.5 pt-1">
+            <!-- Bloco do Gravador de Voz do Usuário -->
+            <div class="p-3.5 rounded-2xl bg-slate-800/80 border border-slate-700/80">
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-[11px] font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                  <span>🎙️</span> <span>Sua Autoavaliação</span>
+                </span>
+                <span id="record-status-label" class="text-[10px] font-semibold text-slate-400">Grave sua fala</span>
+              </div>
+
+              <div class="flex items-center gap-2">
+                <!-- Botão Principal de Ação (Gravar / Parar / Ouvir) -->
+                <button id="modal-record-btn" onclick="handleRecordAction()" class="flex-1 py-2.5 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold flex items-center justify-center gap-2 transition active:scale-95 shadow-md">
+                  <span id="record-btn-icon">🎙️</span>
+                  <span id="record-btn-text">Gravar Áudio</span>
+                </button>
+
+                <!-- Botão Regravar (Apenas a seta circular ↺ com aviso) -->
+                <button id="modal-rerecord-btn" onclick="promptResetRecording()" title="Regravar áudio" class="w-10 h-10 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-300 flex items-center justify-center text-xl font-bold transition border border-slate-600 active:scale-90 shrink-0">
+                  ↺
+                </button>
+              </div>
+
+              <!-- Elemento de áudio interno -->
+              <audio id="modal-recorded-audio" class="hidden"></audio>
+            </div>
+
+            <!-- Cronômetro de Prática (60s) -->
+            <div class="flex items-center justify-between bg-slate-800/60 border border-slate-700/50 px-4 py-2.5 rounded-2xl">
+              <span class="text-xs text-slate-300 font-semibold flex items-center gap-1.5">
+                <span>⏱️</span> <span>Tempo de Prática:</span>
+              </span>
+              <div class="flex items-center gap-2.5">
+                <span id="timer-display" class="text-xs font-black text-indigo-400">60s</span>
+                <button id="timer-btn" onclick="toggleWorkoutTimer()" class="py-1 px-3 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-lg transition active:scale-95">
+                  Iniciar
+                </button>
+              </div>
             </div>
           </div>
 
@@ -376,6 +405,30 @@
           </p>
         </div>
 
+      </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- MODAL DE CONFIRMAÇÃO PARA REGRAVAR (AVISO) -->
+    <!-- ========================================== -->
+    <div id="rerecord-confirm-modal" class="hidden fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 animate-pop">
+      <div class="w-full max-w-xs bg-slate-900 border border-slate-700/80 rounded-3xl p-5 text-center shadow-2xl">
+        <div class="w-12 h-12 mx-auto mb-3 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center text-2xl border border-amber-500/30">
+          ⚠️
+        </div>
+        <h3 class="font-black text-slate-100 text-base mb-1.5">Regravar Áudio?</h3>
+        <p class="text-xs text-slate-300 mb-5 leading-relaxed">
+          Ao regravar, a sua gravação anterior será <b>apagada permanentemente</b>. Deseja continuar?
+        </p>
+
+        <div class="grid grid-cols-2 gap-2">
+          <button onclick="closeRerecordModal()" class="py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition">
+            Cancelar
+          </button>
+          <button onclick="confirmAndRerecord()" class="py-2.5 px-3 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition shadow-lg shadow-rose-600/30">
+            Sim, Apagar
+          </button>
+        </div>
       </div>
     </div>
 
