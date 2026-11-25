@@ -6,10 +6,11 @@ Aplicativo progressivo (PWA) mobile-first para desenvolvimento de voz, dicção 
 - **🔐 Código de Acesso:** Barreira de entrada configurável para clientes (ex.: código enviado após a compra na Hotmart/Kiwify).
 - **👋 Boas-vindas & Instalação Inteligente:** Onboarding personalizado com o nome do aluno e guia automático para instalar na tela de início (Android e iOS).
 - **🏆 Desafio 21 Dias:**
-  - Bloqueio progressivo real (`diario`, `sequencial` ou `livre`), sequência diária (🔥) no fuso horário local e cronômetro de 60s.
+  - Bloqueio progressivo real com virada diária às **06h da manhã** (`diario` por padrão, ou `sequencial` selecionável pelo usuário em ⚙️ Configurações), sequência diária (🔥) no fuso horário local e cronômetro de 60s.
   - **Gravador de Voz Integrado:** Gravações salvas no próprio aparelho via `IndexedDB` (com aviso de segurança ao regravar `↺`).
   - **📈 Minha Evolução (Antes x Depois):** Compara lado a lado o áudio do Dia 1 com a gravação mais recente.
   - **🎓 Certificado de Conclusão:** Gera imagem em alta resolução (1080×1350) personalizada com o nome do aluno para baixar ou compartilhar no Dia 21.
+- **🔔 Notificações Personalizáveis:** Botão rápido no topo (`🔔`, que fica persistente enquanto desativado e some automaticamente ao ativar), escolha do horário diário da notificação e opção de **relembrar às 22h** caso o treino do dia ainda não tenha sido feito.
 - **⚡ Trava-Línguas:** Biblioteca com busca, filtros, favoritos (⭐), gravador próprio por card e **Desafio 3x** com salvamento de recorde de tempo.
 - **🎈 Área Kids:** Tema claro e lúdico com orientação para os pais, exercícios de fonoaudiologia em formato de brincadeira e conquista de estrelas.
 - **⚙️ Configurações & Backup:** Exportação e restauração do progresso em arquivo `.json`, além de opção de reiniciar a jornada.

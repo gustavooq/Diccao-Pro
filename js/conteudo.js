@@ -12,9 +12,9 @@ const APP_CONTEUDO = {
     slogan: "Sua fala clara, confiante e destravada em 21 dias",
     totalDiasDesafio: 21,
 
-    // Como os dias do desafio são liberados:
-    //  "diario"     -> 1 dia novo por dia (precisa concluir o anterior e esperar o dia seguinte)
-    //  "sequencial" -> libera o próximo assim que concluir o anterior (pode fazer vários no mesmo dia)
+    // Como os dias do desafio são liberados por padrão (o usuário pode alterar em ⚙️ Configurações):
+    //  "diario"     -> 1 dia novo por dia, liberando sempre às 06h da manhã (padrão)
+    //  "sequencial" -> libera o próximo na hora ao concluir o anterior
     //  "livre"      -> todos os dias abertos
     modoLiberacao: "diario",
 

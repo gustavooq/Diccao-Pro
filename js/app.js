@@ -7,10 +7,20 @@
 const STORAGE_KEY = 'diccao_app_state_v1';
 const CFG = APP_CONTEUDO.config;
 const TOTAL_DIAS = CFG.totalDiasDesafio;
+const UNLOCK_HOUR = 6; // Novo treino diário libera sempre às 06h da manhã
 
 const DEFAULT_STATE = {
   completedDays: [],
-  completionDates: {}, // { [dia]: 'AAAA-MM-DD' } (data local em que concluiu)
+  completionDates: {}, // { [dia]: 'AAAA-MM-DD' } (data civil local, exibida no certificado)
+  completionCycles: {}, // { [dia]: 'AAAA-MM-DD' } (ciclo diário virando às 06h da manhã)
+  releaseMode: 'diario', // 'diario' (padrão) | 'sequencial'
+  notifications: {
+    enabled: false,
+    time: '08:00',
+    remindAt22: false,
+    lastDailySent: '',
+    lastRemind22Sent: ''
+  },
   favoriteTravalinguas: [],
   tlRecords: {}, // { [id]: melhor tempo em segundos no Desafio 3x }
   kidsStars: 0,
@@ -24,7 +34,7 @@ let appState = JSON.parse(JSON.stringify(DEFAULT_STATE));
 let deferredPrompt = null;
 
 // ==========================================
-// DATAS (sempre no horário LOCAL do aparelho)
+// DATAS E CICLO DAS 06H (horário LOCAL do aparelho)
 // ==========================================
 function dateKey(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -32,6 +42,17 @@ function dateKey(d) {
 
 function todayKey() {
   return dateKey(new Date());
+}
+
+// Chave do ciclo que vira às 06h da manhã (antes das 06h ainda pertence ao ciclo anterior)
+function cycleKey(d = new Date()) {
+  const shifted = new Date(d);
+  shifted.setHours(shifted.getHours() - UNLOCK_HOUR);
+  return dateKey(shifted);
+}
+
+function nextUnlockLabel(d = new Date()) {
+  return d.getHours() < UNLOCK_HOUR ? 'hoje às 06h' : 'amanhã às 06h';
 }
 
 function formatDateBR(key) {
@@ -87,13 +108,20 @@ function loadState() {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
     if (saved) {
       appState = Object.assign(JSON.parse(JSON.stringify(DEFAULT_STATE)), saved);
-      // Migração da versão antiga (sem datas por dia)
+      appState.notifications = Object.assign({}, DEFAULT_STATE.notifications, saved.notifications || {});
+      appState.completionDates = saved.completionDates || {};
+      appState.completionCycles = saved.completionCycles || {};
+      appState.releaseMode = saved.releaseMode || CFG.modoLiberacao || 'diario';
+      // Migração da versão antiga (sem datas/ciclos por dia)
       const fallback = saved.lastCompletedDate || todayKey();
       appState.completedDays.forEach((d) => {
         if (!appState.completionDates[d]) appState.completionDates[d] = fallback;
+        if (!appState.completionCycles[d]) appState.completionCycles[d] = appState.completionDates[d];
       });
       delete appState.streak;
       delete appState.lastCompletedDate;
+    } else {
+      appState.releaseMode = CFG.modoLiberacao || 'diario';
     }
   } catch (e) {
     console.warn('Erro ao carregar dados locais', e);
@@ -109,21 +137,30 @@ function saveState() {
   updateUI();
 }
 
-// Sequência 🔥 = dias seguidos (até hoje ou ontem) com treino concluído
+// Sequência 🔥 = ciclos diários (virando às 06h) seguidos com treino concluído
 function computeStreak() {
-  const dates = new Set(Object.values(appState.completionDates));
+  const cycles = new Set(
+    appState.completedDays.map((n) => appState.completionCycles[n] || appState.completionDates[n]).filter(Boolean)
+  );
   const d = new Date();
+  d.setHours(d.getHours() - UNLOCK_HOUR);
   d.setHours(0, 0, 0, 0);
-  if (!dates.has(dateKey(d))) {
+  if (!cycles.has(dateKey(d))) {
     d.setDate(d.getDate() - 1);
-    if (!dates.has(dateKey(d))) return 0;
+    if (!cycles.has(dateKey(d))) return 0;
   }
   let streak = 0;
-  while (dates.has(dateKey(d))) {
+  while (cycles.has(dateKey(d))) {
     streak++;
     d.setDate(d.getDate() - 1);
   }
   return streak;
+}
+
+function hasTrainedInCurrentCycle() {
+  if (isDone(TOTAL_DIAS)) return true;
+  const cur = cycleKey();
+  return appState.completedDays.some((n) => (appState.completionCycles[n] || appState.completionDates[n]) === cur);
 }
 
 // ==========================================
@@ -177,31 +214,43 @@ function updateUI() {
   setText('streak-count', `${computeStreak()}d`);
   setText('kids-stars-count', `${appState.kidsStars} ⭐`);
   setText('header-greeting', appState.userName ? `Olá, ${appState.userName} 👋` : 'Desafio diário');
+  setText(
+    'desafio-mode-hint',
+    getActiveReleaseMode() === 'sequencial'
+      ? 'O próximo treino libera assim que concluir o anterior.'
+      : 'Um novo treino libera todo dia às 06h.'
+  );
 
+  updateNotificationUI();
   renderDesafioGrid();
   renderEvolucao();
   renderCertificadoCard();
 }
 
 // ==========================================
-// DESAFIO 21 DIAS: LIBERAÇÃO DOS DIAS
+// DESAFIO 21 DIAS: LIBERAÇÃO DOS DIAS (06H)
 // ==========================================
 function isDone(n) {
   return appState.completedDays.includes(n);
+}
+
+function getActiveReleaseMode() {
+  return appState.releaseMode || CFG.modoLiberacao || 'diario';
 }
 
 /**
  * 'done'            -> concluído
  * 'open'            -> liberado para treinar
  * 'locked-seq'      -> precisa concluir o dia anterior
- * 'locked-tomorrow' -> anterior concluído hoje, libera amanhã (modo diário)
+ * 'locked-tomorrow' -> anterior concluído neste ciclo, libera às 06h (modo diário)
  */
 function getDayStatus(n) {
   if (isDone(n)) return 'done';
-  const mode = CFG.modoLiberacao || 'diario';
+  const mode = getActiveReleaseMode();
   if (mode === 'livre' || n === 1) return 'open';
   if (!isDone(n - 1)) return 'locked-seq';
-  if (mode === 'diario' && appState.completionDates[n - 1] === todayKey()) return 'locked-tomorrow';
+  const prevCycle = appState.completionCycles[n - 1] || appState.completionDates[n - 1];
+  if (mode === 'diario' && prevCycle === cycleKey()) return 'locked-tomorrow';
   return 'open';
 }
 
@@ -213,6 +262,7 @@ function renderDesafioGrid() {
   const container = document.getElementById('desafio-grid');
   if (!container) return;
   container.innerHTML = '';
+  const unlockLbl = nextUnlockLabel();
 
   APP_CONTEUDO.desafio21.forEach((dia) => {
     const st = getDayStatus(dia.dia);
@@ -257,7 +307,7 @@ function renderDesafioGrid() {
       <h3 class="font-bold text-slate-100 text-sm mb-1 leading-snug">${dia.titulo}</h3>
       <div class="flex flex-wrap items-center text-xs text-slate-400 gap-x-2">
         <span>🎯 ${dia.foco}</span><span>•</span><span>⏱️ ${dia.duracao}</span>
-        ${st === 'locked-tomorrow' ? '<span class="text-amber-300 font-semibold">• Libera amanhã</span>' : ''}
+        ${st === 'locked-tomorrow' ? `<span class="text-amber-300 font-semibold">• Libera ${unlockLbl}</span>` : ''}
       </div>`;
     container.appendChild(card);
   });
@@ -270,7 +320,7 @@ function onDayClick(n) {
     return;
   }
   if (st === 'locked-tomorrow') {
-    showToast('⏳ Volte amanhã! Um novo treino é liberado por dia.');
+    showToast(`⏳ Novo treino libera ${nextUnlockLabel()}! Os treinos abrem todo dia às 06h.`);
     return;
   }
   openDayModal(n);
@@ -335,18 +385,22 @@ function toggleCompleteDay(n) {
     if (!canUncheck(n)) return;
     appState.completedDays = appState.completedDays.filter((d) => d !== n);
     delete appState.completionDates[n];
+    delete appState.completionCycles[n];
   } else if (st === 'open') {
     appState.completedDays.push(n);
     appState.completedDays.sort((a, b) => a - b);
     appState.completionDates[n] = todayKey();
+    appState.completionCycles[n] = cycleKey();
     SoundFX.playCelebration();
     triggerConfetti();
     if (n === TOTAL_DIAS) setTimeout(openCertificateModal, 900);
-    else if ((CFG.modoLiberacao || 'diario') === 'diario') showToast('🔥 Treino concluído! O próximo libera amanhã.');
+    else if (getActiveReleaseMode() === 'diario') showToast(`🔥 Treino concluído! O próximo libera ${nextUnlockLabel()}.`);
+    else showToast('🔥 Treino concluído! Próximo dia liberado!');
   } else {
     return;
   }
   saveState();
+  syncScheduledNotifications();
   closeDayModal();
 }
 
@@ -830,12 +884,308 @@ function completeKidsExercise(id) {
 }
 
 // ==========================================
+// NOTIFICAÇÕES DIÁRIAS & LEMBRETE ÀS 22H
+// ==========================================
+function hasNotificationPermission() {
+  return 'Notification' in window && Notification.permission === 'granted';
+}
+
+function isNotificationActive() {
+  return Boolean(appState.notifications && appState.notifications.enabled && hasNotificationPermission());
+}
+
+function updateNotificationUI() {
+  // Botão no cabeçalho (apenas ícone): some se ativado, fica persistente se não estiver ativado
+  const headerBtn = document.getElementById('notif-btn');
+  if (headerBtn) {
+    headerBtn.classList.toggle('hidden', isNotificationActive());
+  }
+
+  // Controles na tela de Configurações
+  const statusEl = document.getElementById('settings-notif-status');
+  const toggleBtn = document.getElementById('settings-notif-toggle');
+  const timeInput = document.getElementById('settings-notif-time');
+  const remind22Input = document.getElementById('settings-notif-remind22');
+
+  const notif = appState.notifications || DEFAULT_STATE.notifications;
+  if (timeInput && document.activeElement !== timeInput) {
+    timeInput.value = notif.time || '08:00';
+  }
+  if (remind22Input) {
+    remind22Input.checked = Boolean(notif.remindAt22);
+  }
+
+  if (!statusEl || !toggleBtn) return;
+
+  if (isNotificationActive()) {
+    const extra = notif.remindAt22 ? ' + lembrete às 22h' : '';
+    statusEl.textContent = `Ativadas • às ${notif.time || '08:00'}${extra}`;
+    statusEl.className = 'text-[11px] text-emerald-400 font-semibold';
+    toggleBtn.textContent = 'Desativar';
+    toggleBtn.className = 'py-1.5 px-3 rounded-xl text-xs font-bold transition bg-slate-700 hover:bg-slate-600 text-slate-200 shrink-0';
+  } else {
+    toggleBtn.textContent = 'Ativar';
+    toggleBtn.className = 'py-1.5 px-3 rounded-xl text-xs font-bold transition bg-indigo-600 hover:bg-indigo-500 text-white shrink-0';
+    if (!('Notification' in window) && isIOS() && !isStandalone()) {
+      statusEl.textContent = 'Instale o app na tela inicial (📲) para ativar no iPhone';
+      statusEl.className = 'text-[11px] text-amber-300';
+    } else if ('Notification' in window && Notification.permission === 'denied') {
+      statusEl.textContent = 'Permissão bloqueada nas configurações do navegador';
+      statusEl.className = 'text-[11px] text-rose-400';
+    } else {
+      statusEl.textContent = 'Desativadas';
+      statusEl.className = 'text-[11px] text-slate-400';
+    }
+  }
+}
+
+async function enableNotificationsWithPermission() {
+  if (!('Notification' in window)) {
+    if (isIOS() && !isStandalone()) {
+      showToast('📲 No iPhone, instale o app na Tela de Início primeiro para receber notificações.');
+      openInstallModal();
+    } else {
+      showToast('Seu navegador não suporta notificações.');
+    }
+    updateUI();
+    return false;
+  }
+
+  if (Notification.permission === 'denied') {
+    showToast('🔕 Notificações bloqueadas no navegador. Libere nas permissões do site.');
+    updateUI();
+    return false;
+  }
+
+  if (Notification.permission === 'default') {
+    let perm = 'default';
+    try {
+      perm = await Notification.requestPermission();
+    } catch (e) {
+      perm = Notification.permission;
+    }
+    if (perm !== 'granted') {
+      updateUI();
+      showToast('Permita as notificações para receber os lembretes.');
+      return false;
+    }
+  }
+
+  // Evita disparar imediatamente um horário de hoje que já passou antes de ativar
+  const now = new Date();
+  const [hh, mm] = (appState.notifications.time || '08:00').split(':').map(Number);
+  if (now.getHours() * 60 + now.getMinutes() > hh * 60 + mm) {
+    appState.notifications.lastDailySent = todayKey();
+  }
+  if (now.getHours() * 60 + now.getMinutes() > 22 * 60) {
+    appState.notifications.lastRemind22Sent = todayKey();
+  }
+
+  appState.notifications.enabled = true;
+  saveState();
+  syncScheduledNotifications();
+  showToast(`🔔 Notificações ativadas para ${appState.notifications.time}!`);
+  return true;
+}
+
+async function onHeaderNotifClick() {
+  const ok = await enableNotificationsWithPermission();
+  if (!ok && 'Notification' in window && Notification.permission === 'denied') {
+    openSettingsModal();
+  }
+}
+
+async function toggleNotificationsSetting() {
+  if (isNotificationActive()) {
+    appState.notifications.enabled = false;
+    saveState();
+    showToast('🔕 Notificações desativadas.');
+    cancelTriggerNotifications();
+  } else {
+    await enableNotificationsWithPermission();
+  }
+}
+
+function onNotifTimeChange(val) {
+  if (!/^\d{2}:\d{2}$/.test(val)) return;
+  appState.notifications.time = val;
+  const now = new Date();
+  const [hh, mm] = val.split(':').map(Number);
+  if (now.getHours() * 60 + now.getMinutes() <= hh * 60 + mm) {
+    if (appState.notifications.lastDailySent === todayKey()) appState.notifications.lastDailySent = '';
+  } else {
+    appState.notifications.lastDailySent = todayKey();
+  }
+  saveState();
+  syncScheduledNotifications();
+  showToast(`⏰ Horário da notificação salvo: ${val}`);
+}
+
+function onNotifRemind22Change(checked) {
+  appState.notifications.remindAt22 = Boolean(checked);
+  if (checked) {
+    const now = new Date();
+    if (now.getHours() * 60 + now.getMinutes() <= 22 * 60) {
+      if (appState.notifications.lastRemind22Sent === todayKey()) appState.notifications.lastRemind22Sent = '';
+    } else {
+      appState.notifications.lastRemind22Sent = todayKey();
+    }
+  }
+  saveState();
+  syncScheduledNotifications();
+  showToast(checked ? '🌙 Lembrete das 22h ativado!' : 'Lembrete das 22h desativado.');
+}
+
+async function sendAppNotification(title, body, tag) {
+  if (!isNotificationActive()) return;
+  const options = {
+    body,
+    icon: './assets/icons/icon-192.png',
+    badge: './assets/icons/icon-192.png',
+    tag
+  };
+  try {
+    if ('serviceWorker' in navigator) {
+      const reg = await navigator.serviceWorker.getRegistration();
+      if (reg && reg.showNotification) {
+        await reg.showNotification(title, options);
+        return;
+      }
+    }
+    new Notification(title, options);
+  } catch (e) {
+    console.warn('Falha ao exibir notificação:', e);
+  }
+}
+
+async function cancelTriggerNotifications() {
+  try {
+    if (!('serviceWorker' in navigator)) return;
+    const reg = await navigator.serviceWorker.getRegistration();
+    if (!reg || !reg.getNotifications) return;
+    const opts = typeof TimestampTrigger !== 'undefined' ? { includeTriggered: true } : {};
+    const existing = await reg.getNotifications(opts);
+    existing.forEach((n) => n.close());
+  } catch (e) {
+    /* silencioso se não suportado */
+  }
+}
+
+// Agenda via TimestampTrigger em PWAs Android/Chromium compatíveis
+async function syncScheduledNotifications() {
+  await cancelTriggerNotifications();
+  if (!isNotificationActive() || isDone(TOTAL_DIAS)) return;
+  if (typeof TimestampTrigger === 'undefined') return;
+
+  try {
+    const reg = await navigator.serviceWorker.getRegistration();
+    if (!reg || !reg.showNotification) return;
+
+    const now = new Date();
+    const [hh, mm] = (appState.notifications.time || '08:00').split(':').map(Number);
+    const nextDaily = new Date(now);
+    nextDaily.setHours(hh, mm, 0, 0);
+    if (nextDaily <= now || hasTrainedInCurrentCycle()) {
+      nextDaily.setDate(nextDaily.getDate() + 1);
+    }
+    await reg.showNotification('🎙️ Hora do seu treino de dicção!', {
+      body: 'Pratique 5 minutos agora e mantenha sua sequência ativa 🔥',
+      icon: './assets/icons/icon-192.png',
+      badge: './assets/icons/icon-192.png',
+      tag: 'diccao-daily-scheduled',
+      showTrigger: new TimestampTrigger(nextDaily.getTime())
+    });
+
+    if (appState.notifications.remindAt22) {
+      const next22 = new Date(now);
+      next22.setHours(22, 0, 0, 0);
+      if (next22 <= now || hasTrainedInCurrentCycle()) {
+        next22.setDate(next22.getDate() + 1);
+      }
+      await reg.showNotification('⏰ Lembrete das 22h: não perca seu treino!', {
+        body: 'Ainda dá tempo de concluir os 5 minutos de hoje e manter sua sequência 🔥',
+        icon: './assets/icons/icon-192.png',
+        badge: './assets/icons/icon-192.png',
+        tag: 'diccao-remind22-scheduled',
+        showTrigger: new TimestampTrigger(next22.getTime())
+      });
+    }
+  } catch (e) {
+    /* navegador sem suporte a TimestampTrigger usa o verificador ativo */
+  }
+}
+
+function checkAndFireNotifications() {
+  if (!isNotificationActive() || isDone(TOTAL_DIAS)) return;
+  const now = new Date();
+  const today = todayKey();
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  const [hh, mm] = (appState.notifications.time || '08:00').split(':').map(Number);
+  const targetMin = hh * 60 + mm;
+
+  if (
+    appState.notifications.lastDailySent !== today &&
+    nowMin >= targetMin &&
+    nowMin < targetMin + 120 &&
+    !hasTrainedInCurrentCycle()
+  ) {
+    appState.notifications.lastDailySent = today;
+    saveState();
+    sendAppNotification(
+      '🎙️ Hora do seu treino de dicção!',
+      'Pratique 5 minutos agora e mantenha sua sequência ativa 🔥',
+      'diccao-daily'
+    );
+  }
+
+  if (
+    appState.notifications.remindAt22 &&
+    appState.notifications.lastRemind22Sent !== today &&
+    now.getHours() >= 22 &&
+    !hasTrainedInCurrentCycle()
+  ) {
+    appState.notifications.lastRemind22Sent = today;
+    saveState();
+    sendAppNotification(
+      '⏰ Lembrete das 22h: não perca seu treino!',
+      'Ainda dá tempo de concluir os 5 minutos de hoje e manter sua sequência 🔥',
+      'diccao-remind-22h'
+    );
+  }
+}
+
+let unlock06hTimer = null;
+function scheduleNext06hRefresh() {
+  clearTimeout(unlock06hTimer);
+  const now = new Date();
+  const next06 = new Date(now);
+  next06.setHours(UNLOCK_HOUR, 0, 2, 0);
+  if (next06 <= now) next06.setDate(next06.getDate() + 1);
+  unlock06hTimer = setTimeout(() => {
+    updateUI();
+    scheduleNext06hRefresh();
+  }, next06.getTime() - now.getTime());
+}
+
+// ==========================================
 // CONFIGURAÇÕES, BACKUP E REINÍCIO
 // ==========================================
+function changeReleaseMode(mode) {
+  if (mode !== 'diario' && mode !== 'sequencial') return;
+  appState.releaseMode = mode;
+  saveState();
+  showToast(
+    mode === 'diario'
+      ? '📅 Modo Diário: 1 treino por dia (libera às 06h).'
+      : '⚡ Modo Sequencial: próximo treino libera na hora ao concluir!'
+  );
+}
+
 function openSettingsModal() {
   document.getElementById('settings-name').value = appState.userName || '';
-  const modes = { diario: '1 treino novo por dia', sequencial: 'Libera ao concluir o anterior', livre: 'Todos os dias liberados' };
-  document.getElementById('settings-mode').textContent = modes[CFG.modoLiberacao] || modes.diario;
+  const modeSelect = document.getElementById('settings-mode-select');
+  if (modeSelect) modeSelect.value = getActiveReleaseMode() === 'sequencial' ? 'sequencial' : 'diario';
+  updateNotificationUI();
   document.getElementById('settings-modal').classList.remove('hidden');
 }
 
@@ -872,7 +1222,16 @@ function importBackup(event) {
       const data = JSON.parse(reader.result);
       if (data.app !== 'diccao-pro' || !data.state || !Array.isArray(data.state.completedDays)) throw new Error('inválido');
       appState = Object.assign(JSON.parse(JSON.stringify(DEFAULT_STATE)), data.state, { accessGranted: true, onboarded: true });
+      appState.notifications = Object.assign({}, DEFAULT_STATE.notifications, (data.state && data.state.notifications) || {});
+      appState.completionDates = appState.completionDates || {};
+      appState.completionCycles = appState.completionCycles || {};
+      appState.releaseMode = appState.releaseMode || CFG.modoLiberacao || 'diario';
+      appState.completedDays.forEach((d) => {
+        if (!appState.completionDates[d]) appState.completionDates[d] = todayKey();
+        if (!appState.completionCycles[d]) appState.completionCycles[d] = appState.completionDates[d];
+      });
       saveState();
+      syncScheduledNotifications();
       renderTravaLinguas();
       renderKidsContent();
       closeSettingsModal();
@@ -886,10 +1245,17 @@ function importBackup(event) {
 
 async function resetProgress() {
   if (!confirm('Apagar TODO o progresso, recordes, estrelas e gravações? Essa ação não pode ser desfeita.')) return;
-  const keep = { userName: appState.userName, onboarded: true, accessGranted: appState.accessGranted };
+  const keep = {
+    userName: appState.userName,
+    onboarded: true,
+    accessGranted: appState.accessGranted,
+    releaseMode: appState.releaseMode || 'diario',
+    notifications: Object.assign({}, appState.notifications, { lastDailySent: '', lastRemind22Sent: '' })
+  };
   appState = Object.assign(JSON.parse(JSON.stringify(DEFAULT_STATE)), keep);
   await Gravacoes.clearAll();
   saveState();
+  syncScheduledNotifications();
   renderTravaLinguas();
   renderKidsContent();
   closeSettingsModal();
@@ -1063,11 +1429,20 @@ window.addEventListener('DOMContentLoaded', () => {
   renderKidsContent();
   Gravacoes.loadAll();
 
+  scheduleNext06hRefresh();
+  syncScheduledNotifications();
+  checkAndFireNotifications();
+  setInterval(checkAndFireNotifications, 30000);
+
   document.getElementById('tl-search')?.addEventListener('input', renderTravaLinguas);
   document.addEventListener('gravacoes:changed', renderEvolucao);
 
-  // Ao voltar para o app (ex.: no dia seguinte), atualiza liberação e sequência
+  // Ao voltar para o app (ex.: às 06h ou após mudar permissão de notificação), atualiza tudo
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') updateUI();
+    if (document.visibilityState === 'visible') {
+      updateUI();
+      scheduleNext06hRefresh();
+      checkAndFireNotifications();
+    }
   });
 });

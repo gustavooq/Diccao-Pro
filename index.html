@@ -22,8 +22,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
   <!-- CSS gerado (Tailwind compilado, funciona offline) -->
-  <link rel="stylesheet" href="./css/app.css?v=5">
-  <link rel="stylesheet" href="./css/custom.css?v=5">
+  <link rel="stylesheet" href="./css/app.css?v=6">
+  <link rel="stylesheet" href="./css/custom.css?v=6">
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen antialiased flex justify-center">
 
@@ -46,6 +46,7 @@
           <span class="text-sm">🔥</span>
           <span id="streak-count" class="text-xs font-black text-amber-400">0d</span>
         </div>
+        <button id="notif-btn" onclick="onHeaderNotifClick()" aria-label="Ativar notificações" title="Ativar notificações" class="w-8 h-8 rounded-full bg-amber-500/20 border border-amber-500/50 text-amber-300 flex items-center justify-center text-sm hover:bg-amber-500/30 transition active:scale-95">🔔</button>
         <button id="install-btn" onclick="openInstallModal()" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold px-3 py-1.5 rounded-full flex items-center gap-1 transition active:scale-95">
           <span>📲</span><span>App</span>
         </button>
@@ -72,7 +73,7 @@
             <div id="progress-bar" class="h-full bg-gradient-to-r from-indigo-500 via-purple-500 to-emerald-400 transition-all duration-700 rounded-full" style="width: 0%;"></div>
           </div>
           <p class="text-xs text-slate-300 font-medium leading-relaxed">
-            Pratique <span class="text-indigo-300 font-bold">5 minutos por dia</span>. Um novo treino é liberado a cada dia. Faça em voz alta!
+            Pratique <span class="text-indigo-300 font-bold">5 minutos por dia</span>. <span id="desafio-mode-hint">Um novo treino libera todo dia às 06h.</span> Faça em voz alta!
           </p>
         </div>
 
@@ -261,8 +262,39 @@
         <input id="settings-name" maxlength="30" placeholder="Como quer ser chamado(a)?"
           class="w-full bg-slate-800 border border-slate-700 rounded-xl py-2.5 px-3 text-sm text-slate-100 mb-4 focus:outline-none focus:border-indigo-500">
 
-        <div class="p-3 rounded-2xl bg-slate-800/70 border border-slate-700 mb-4 text-xs text-slate-300">
-          <span class="font-bold text-slate-200">Liberação dos treinos:</span> <span id="settings-mode"></span>
+        <label class="block text-xs font-bold text-slate-400 mb-1" for="settings-mode-select">Modo de liberação dos treinos</label>
+        <select id="settings-mode-select" onchange="changeReleaseMode(this.value)"
+          class="w-full bg-slate-800 border border-slate-700 rounded-xl py-2.5 px-3 text-sm text-slate-100 mb-4 focus:outline-none focus:border-indigo-500">
+          <option value="diario">Diário — 1 por dia (libera às 06h)</option>
+          <option value="sequencial">Sequencial — libera na hora ao concluir o anterior</option>
+        </select>
+
+        <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Notificações</p>
+        <div id="settings-notif-section" class="p-3.5 rounded-2xl bg-slate-800/70 border border-slate-700 mb-5 space-y-3">
+          <div class="flex items-center justify-between gap-2">
+            <div>
+              <p class="text-xs font-bold text-slate-200 flex items-center gap-1.5"><span>🔔</span><span>Lembrete de treino</span></p>
+              <p id="settings-notif-status" class="text-[11px] text-slate-400">Desativadas</p>
+            </div>
+            <button type="button" id="settings-notif-toggle" onclick="toggleNotificationsSetting()"
+              class="py-1.5 px-3 rounded-xl text-xs font-bold transition bg-indigo-600 hover:bg-indigo-500 text-white shrink-0">
+              Ativar
+            </button>
+          </div>
+
+          <div class="flex items-center justify-between gap-3 pt-2.5 border-t border-slate-700/60">
+            <label for="settings-notif-time" class="text-xs font-semibold text-slate-300">Horário da notificação</label>
+            <input type="time" id="settings-notif-time" value="08:00" onchange="onNotifTimeChange(this.value)"
+              class="bg-slate-900 border border-slate-700 rounded-xl py-1.5 px-2.5 text-sm font-bold text-slate-100 focus:outline-none focus:border-indigo-500">
+          </div>
+
+          <label for="settings-notif-remind22" class="flex items-start gap-2.5 pt-2.5 border-t border-slate-700/60 cursor-pointer">
+            <input type="checkbox" id="settings-notif-remind22" onchange="onNotifRemind22Change(this.checked)"
+              class="mt-0.5 w-4 h-4 rounded accent-indigo-500 shrink-0">
+            <span class="text-xs text-slate-300 leading-snug">
+              <b>Relembrar no final do dia às 22h</b> (caso ainda não tenha concluído o treino do dia)
+            </span>
+          </label>
         </div>
 
         <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Backup do progresso</p>
@@ -345,7 +377,7 @@
       </div>
 
       <ul class="space-y-2.5 mb-5 text-sm text-slate-200">
-        <li class="flex gap-3 items-start"><span class="text-lg">🏆</span><span><b>1 treino por dia</b> de 5 minutos. Um novo dia é liberado a cada 24h.</span></li>
+        <li class="flex gap-3 items-start"><span class="text-lg">🏆</span><span><b>1 treino por dia</b> de 5 minutos. Um novo treino libera todo dia às 06h da manhã.</span></li>
         <li class="flex gap-3 items-start"><span class="text-lg">🎙️</span><span><b>Grave sua voz</b> no Dia 1 e no Dia 21 e compare a sua evolução.</span></li>
         <li class="flex gap-3 items-start"><span class="text-lg">🔥</span><span>Treine todos os dias para manter sua <b>sequência</b>.</span></li>
         <li class="flex gap-3 items-start"><span class="text-lg">🎓</span><span>No final, ganhe seu <b>certificado</b> de conclusão.</span></li>
@@ -360,9 +392,9 @@
     </form>
   </div>
 
-  <script src="./js/conteudo.js?v=5"></script>
-  <script src="./js/db.js?v=5"></script>
-  <script src="./js/recorder.js?v=5"></script>
-  <script src="./js/app.js?v=5"></script>
+  <script src="./js/conteudo.js?v=7"></script>
+  <script src="./js/db.js?v=7"></script>
+  <script src="./js/recorder.js?v=7"></script>
+  <script src="./js/app.js?v=7"></script>
 </body>
 </html>
