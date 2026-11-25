@@ -22,8 +22,18 @@
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
   <!-- CSS gerado (Tailwind compilado, funciona offline) -->
-  <link rel="stylesheet" href="./css/app.css?v=6">
-  <link rel="stylesheet" href="./css/custom.css?v=6">
+  <link rel="stylesheet" href="./css/app.css?v=8">
+  <link rel="stylesheet" href="./css/custom.css?v=8">
+  <script>
+    try {
+      const s = JSON.parse(localStorage.getItem('diccao_app_state_v1') || 'null');
+      if (s && s.theme === 'clara') {
+        document.documentElement.classList.add('theme-light');
+        const m = document.querySelector('meta[name="theme-color"]');
+        if (m) m.setAttribute('content', '#f8fafc');
+      }
+    } catch (e) {}
+  </script>
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen antialiased flex justify-center">
 
@@ -64,7 +74,7 @@
 
       <!-- ===== ABA 1: DESAFIO 21 DIAS ===== -->
       <section id="tab-desafio" class="tab-content animate-pop">
-        <div class="p-5 rounded-3xl bg-gradient-to-br from-indigo-950/80 via-slate-800/90 to-purple-950/70 border border-indigo-500/30 shadow-xl mb-6">
+        <div class="hero-progress-card p-5 rounded-3xl bg-gradient-to-br from-indigo-950/80 via-slate-800/90 to-purple-950/70 border border-indigo-500/30 shadow-xl mb-6">
           <div class="flex justify-between items-center mb-2">
             <span class="text-xs font-bold text-indigo-300 uppercase tracking-wider">Seu progresso</span>
             <span id="progress-text" class="text-xs font-extrabold text-indigo-200 bg-indigo-500/20 px-2 py-0.5 rounded-full">0/21 dias (0%)</span>
@@ -262,6 +272,18 @@
         <input id="settings-name" maxlength="30" placeholder="Como quer ser chamado(a)?"
           class="w-full bg-slate-800 border border-slate-700 rounded-xl py-2.5 px-3 text-sm text-slate-100 mb-4 focus:outline-none focus:border-indigo-500">
 
+        <p class="text-xs font-bold text-slate-400 mb-1.5">Iluminação da tela</p>
+        <div role="group" aria-label="Tipo de iluminação" class="theme-switcher grid grid-cols-2 gap-2 p-1 rounded-2xl bg-slate-800/80 border border-slate-700 mb-4">
+          <button type="button" id="theme-btn-clara" onclick="setTheme('clara')"
+            class="py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition">
+            <span>☀️</span><span>Clara</span>
+          </button>
+          <button type="button" id="theme-btn-escura" onclick="setTheme('escura')"
+            class="py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition">
+            <span>🌙</span><span>Escura</span>
+          </button>
+        </div>
+
         <label class="block text-xs font-bold text-slate-400 mb-1" for="settings-mode-select">Modo de liberação dos treinos</label>
         <select id="settings-mode-select" onchange="changeReleaseMode(this.value)"
           class="w-full bg-slate-800 border border-slate-700 rounded-xl py-2.5 px-3 text-sm text-slate-100 mb-4 focus:outline-none focus:border-indigo-500">
@@ -392,9 +414,9 @@
     </form>
   </div>
 
-  <script src="./js/conteudo.js?v=7"></script>
-  <script src="./js/db.js?v=7"></script>
-  <script src="./js/recorder.js?v=7"></script>
-  <script src="./js/app.js?v=7"></script>
+  <script src="./js/conteudo.js?v=8"></script>
+  <script src="./js/db.js?v=8"></script>
+  <script src="./js/recorder.js?v=8"></script>
+  <script src="./js/app.js?v=8"></script>
 </body>
 </html>

@@ -13,7 +13,7 @@ Aplicativo progressivo (PWA) mobile-first para desenvolvimento de voz, dicção 
 - **🔔 Notificações Personalizáveis:** Botão rápido no topo (`🔔`, que fica persistente enquanto desativado e some automaticamente ao ativar), escolha do horário diário da notificação e opção de **relembrar às 22h** caso o treino do dia ainda não tenha sido feito.
 - **⚡ Trava-Línguas:** Biblioteca com busca, filtros, favoritos (⭐), gravador próprio por card e **Desafio 3x** com salvamento de recorde de tempo.
 - **🎈 Área Kids:** Tema claro e lúdico com orientação para os pais, exercícios de fonoaudiologia em formato de brincadeira e conquista de estrelas.
-- **⚙️ Configurações & Backup:** Exportação e restauração do progresso em arquivo `.json`, além de opção de reiniciar a jornada.
+- **⚙️ Configurações, Iluminação & Backup:** Escolha entre iluminação **Clara** (☀️) ou **Escura** (🌙), exportação e restauração do progresso em arquivo `.json`, além de opção de reiniciar a jornada.
 - **📴 100% PWA & Offline:** Tailwind CSS compilado localmente (`css/app.css`) + Service Worker (`sw.js`) e `manifest.json`.
 
 ## 🛠️ Onde personalizar seu conteúdo

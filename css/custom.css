@@ -3,6 +3,11 @@
 :root {
   --sat: env(safe-area-inset-top, 0px);
   --sab: env(safe-area-inset-bottom, 0px);
+  color-scheme: dark;
+}
+
+html.theme-light {
+  color-scheme: light;
 }
 
 body {
@@ -39,6 +44,159 @@ input {
 .kids-theme {
   background: linear-gradient(180deg, #fff7ed 0%, #fef3c7 45%, #e0f2fe 100%);
   color: #1e293b;
+}
+
+/* =========================================================
+   ILUMINAÇÃO CLARA GLOBAL (html.theme-light)
+   ========================================================= */
+html.theme-light body {
+  background-color: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+
+html.theme-light body > div.max-w-md {
+  background-color: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+}
+
+html.theme-light header {
+  background-color: rgba(255, 255, 255, 0.92) !important;
+  border-color: #e2e8f0 !important;
+}
+
+html.theme-light .glass-nav {
+  background: rgba(255, 255, 255, 0.94);
+  border-top: 1px solid #e2e8f0;
+}
+
+/* Card principal de progresso no Desafio */
+html.theme-light .hero-progress-card {
+  background: linear-gradient(135deg, #eef2ff 0%, #f5f3ff 55%, #ecfdf5 100%) !important;
+  border-color: #c7d2fe !important;
+  box-shadow: 0 10px 25px -5px rgba(99, 102, 241, 0.12) !important;
+}
+
+/* Superfícies escuras convertidas para claras (exceto área Kids) */
+html.theme-light :not(.kids-theme) > .bg-slate-950,
+html.theme-light #gate.bg-slate-950,
+html.theme-light .bg-slate-900\/60 {
+  background-color: #f8fafc !important;
+}
+
+html.theme-light #onboarding {
+  background-color: rgba(241, 245, 249, 0.96) !important;
+}
+
+html.theme-light .bg-slate-900 {
+  background-color: #ffffff !important;
+}
+
+html.theme-light .bg-slate-800,
+html.theme-light .bg-slate-800\/90,
+html.theme-light .bg-slate-800\/80,
+html.theme-light .bg-slate-800\/70,
+html.theme-light .bg-slate-800\/60,
+html.theme-light .bg-slate-800\/40 {
+  background-color: #f1f5f9 !important;
+}
+
+/* Cards principais em branco sobre o fundo #f8fafc */
+html.theme-light #travalinguas-list > div,
+html.theme-light #evolucao-card > div {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+}
+
+/* Estados dos cards da trilha 21 dias no modo claro */
+html.theme-light .bg-emerald-950\/40 {
+  background-color: #ecfdf5 !important;
+  border-color: #6ee7b7 !important;
+}
+
+html.theme-light .border-amber-500\/40 {
+  background-color: #fffbeb !important;
+  border-color: #fcd34d !important;
+}
+
+html.theme-light .hover\:text-slate-200:hover {
+  color: #0f172a !important;
+}
+
+html.theme-light .bg-indigo-950\/60,
+html.theme-light .bg-indigo-950\/40 {
+  background-color: #eef2ff !important;
+  border-color: #818cf8 !important;
+}
+
+html.theme-light .bg-rose-950\/60 {
+  background-color: #fff1f2 !important;
+  border-color: #fda4af !important;
+  color: #be123c !important;
+}
+
+html.theme-light .bg-slate-700 {
+  background-color: #e2e8f0 !important;
+}
+html.theme-light .hover\:bg-slate-700:hover,
+html.theme-light .hover\:bg-slate-600:hover {
+  background-color: #cbd5e1 !important;
+}
+
+/* Bordas */
+html.theme-light .border-slate-800,
+html.theme-light .border-slate-700,
+html.theme-light .border-slate-700\/80,
+html.theme-light .border-slate-700\/70,
+html.theme-light .border-slate-700\/60,
+html.theme-light .border-slate-700\/50,
+html.theme-light .border-slate-700\/40,
+html.theme-light .border-slate-600 {
+  border-color: #cbd5e1 !important;
+}
+
+/* Tipografia adaptada para contraste alto no fundo claro */
+html.theme-light .text-slate-100 { color: #0f172a !important; }
+html.theme-light .text-slate-200 { color: #1e293b !important; }
+html.theme-light .text-slate-300 { color: #334155 !important; }
+html.theme-light .text-slate-400 { color: #475569 !important; }
+html.theme-light .text-slate-500 { color: #64748b !important; }
+
+html.theme-light .text-indigo-400,
+html.theme-light .text-indigo-300,
+html.theme-light .text-indigo-300\/80,
+html.theme-light .text-indigo-200 {
+  color: #4338ca !important;
+}
+
+html.theme-light .text-emerald-400 {
+  color: #047857 !important;
+}
+
+html.theme-light .text-amber-400,
+html.theme-light .text-amber-300,
+html.theme-light .text-amber-200 {
+  color: #b45309 !important;
+}
+
+html.theme-light .text-rose-400,
+html.theme-light .text-rose-300 {
+  color: #be123c !important;
+}
+
+/* Banner de instalação mantém fundo escuro com texto claro */
+html.theme-light #pwa-install-banner .text-indigo-200 {
+  color: #e0e7ff !important;
+}
+
+/* Toast invertido no modo claro para destacar sobre fundo branco */
+html.theme-light #toast {
+  background-color: #0f172a !important;
+  color: #f8fafc !important;
+}
+
+html.theme-light ::-webkit-scrollbar-thumb {
+  background: rgba(15, 23, 42, 0.2);
 }
 
 /* Rolagem */

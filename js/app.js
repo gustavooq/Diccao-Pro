@@ -14,6 +14,7 @@ const DEFAULT_STATE = {
   completionDates: {}, // { [dia]: 'AAAA-MM-DD' } (data civil local, exibida no certificado)
   completionCycles: {}, // { [dia]: 'AAAA-MM-DD' } (ciclo diário virando às 06h da manhã)
   releaseMode: 'diario', // 'diario' (padrão) | 'sequencial'
+  theme: 'escura', // 'escura' (padrão) | 'clara'
   notifications: {
     enabled: false,
     time: '08:00',
@@ -112,6 +113,7 @@ function loadState() {
       appState.completionDates = saved.completionDates || {};
       appState.completionCycles = saved.completionCycles || {};
       appState.releaseMode = saved.releaseMode || CFG.modoLiberacao || 'diario';
+      appState.theme = saved.theme === 'clara' ? 'clara' : 'escura';
       // Migração da versão antiga (sem datas/ciclos por dia)
       const fallback = saved.lastCompletedDate || todayKey();
       appState.completedDays.forEach((d) => {
@@ -221,6 +223,7 @@ function updateUI() {
       : 'Um novo treino libera todo dia às 06h.'
   );
 
+  updateThemeUI();
   updateNotificationUI();
   renderDesafioGrid();
   renderEvolucao();
@@ -1168,8 +1171,33 @@ function scheduleNext06hRefresh() {
 }
 
 // ==========================================
-// CONFIGURAÇÕES, BACKUP E REINÍCIO
+// CONFIGURAÇÕES, TEMA, BACKUP E REINÍCIO
 // ==========================================
+function applyTheme(theme) {
+  const isLight = theme === 'clara';
+  document.documentElement.classList.toggle('theme-light', isLight);
+  const metaTheme = document.querySelector('meta[name="theme-color"]');
+  if (metaTheme) metaTheme.setAttribute('content', isLight ? '#f8fafc' : '#0f172a');
+}
+
+function updateThemeUI() {
+  const mode = appState.theme === 'clara' ? 'clara' : 'escura';
+  applyTheme(mode);
+  const btnClara = document.getElementById('theme-btn-clara');
+  const btnEscura = document.getElementById('theme-btn-escura');
+  const activeCls = 'py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition bg-indigo-600 text-white shadow';
+  const idleCls = 'py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition text-slate-400 hover:text-slate-200';
+  if (btnClara) btnClara.className = mode === 'clara' ? activeCls : idleCls;
+  if (btnEscura) btnEscura.className = mode === 'escura' ? activeCls : idleCls;
+}
+
+function setTheme(theme) {
+  if (theme !== 'clara' && theme !== 'escura') return;
+  appState.theme = theme;
+  saveState();
+  showToast(theme === 'clara' ? '☀️ Iluminação clara ativada!' : '🌙 Iluminação escura ativada!');
+}
+
 function changeReleaseMode(mode) {
   if (mode !== 'diario' && mode !== 'sequencial') return;
   appState.releaseMode = mode;
@@ -1250,6 +1278,7 @@ async function resetProgress() {
     onboarded: true,
     accessGranted: appState.accessGranted,
     releaseMode: appState.releaseMode || 'diario',
+    theme: appState.theme || 'escura',
     notifications: Object.assign({}, appState.notifications, { lastDailySent: '', lastRemind22Sent: '' })
   };
   appState = Object.assign(JSON.parse(JSON.stringify(DEFAULT_STATE)), keep);
