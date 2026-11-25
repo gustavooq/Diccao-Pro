@@ -1,4 +1,4 @@
-const CACHE_NAME = 'diccao-pro-v2';
+const CACHE_NAME = 'diccao-pro-v3';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',

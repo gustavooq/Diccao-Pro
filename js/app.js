@@ -432,26 +432,56 @@ function stopActivePlayback() {
 // ==========================================
 // AVISO E CONFIRMAÇÃO DE REGRAVAR (↺)
 // ==========================================
+let pendingResetTarget = null; // 'workout' | 'tl:<id>'
+
 function promptResetRecording() {
-  // Se ainda estiver no estado idle, não há gravação para apagar
-  if (recordState === 'idle') {
-    return;
-  }
-  // Abre o modal de aviso
+  if (recordState === 'idle') return;
+  pendingResetTarget = 'workout';
+  
+  const title = document.getElementById('rerecord-modal-title');
+  const desc = document.getElementById('rerecord-modal-desc');
+  if (title) title.innerText = "Regravar Treino Diário?";
+  if (desc) desc.innerHTML = "Ao regravar, a sua gravação anterior será <b>apagada permanentemente</b>. Deseja continuar?";
+
+  const modal = document.getElementById('rerecord-confirm-modal');
+  if (modal) modal.classList.remove('hidden');
+}
+
+function promptResetTLRecord(id) {
+  const rec = tlRecordMap[id];
+  if (!rec || rec.state === 'idle') return;
+  pendingResetTarget = 'tl:' + id;
+
+  const item = APP_CONTEUDO.travaLinguas.find(t => t.id === id);
+  const name = item ? `"${item.titulo}"` : "este trava-língua";
+
+  const title = document.getElementById('rerecord-modal-title');
+  const desc = document.getElementById('rerecord-modal-desc');
+  if (title) title.innerText = "Regravar Trava-Língua?";
+  if (desc) desc.innerHTML = `Ao regravar ${name}, o áudio anterior será <b>apagado permanentemente</b>. Deseja continuar?`;
+
   const modal = document.getElementById('rerecord-confirm-modal');
   if (modal) modal.classList.remove('hidden');
 }
 
 function closeRerecordModal() {
+  pendingResetTarget = null;
   const modal = document.getElementById('rerecord-confirm-modal');
   if (modal) modal.classList.add('hidden');
 }
 
 function confirmAndRerecord() {
+  const target = pendingResetTarget;
   closeRerecordModal();
-  resetRecorderUI();
-  // Inicia automaticamente uma nova gravação limpa
-  startVoiceRecording();
+
+  if (target === 'workout') {
+    resetRecorderUI();
+    startVoiceRecording();
+  } else if (target && target.startsWith('tl:')) {
+    const id = target.split(':')[1];
+    resetTLRecording(id);
+    startTLVoiceRecording(id);
+  }
 }
 
 // ==========================================
@@ -610,9 +640,169 @@ function updateTimerDisplay() {
 }
 
 // ==========================================
-// SEÇÃO: TRAVA-LÍNGUAS
+// SEÇÃO: TRAVA-LÍNGUAS (COM GRAVADOR & REGRAVAR)
 // ==========================================
 let travaLinguasFilter = 'todos';
+const tlRecordMap = {}; // { [id]: { state: 'idle'|'recording'|'recorded', blob, url, seconds, isPlaying } }
+let activeTLRecordingId = null;
+let tlMediaRecorder = null;
+let tlAudioStream = null;
+let tlRecordedChunks = [];
+let tlTimerInterval = null;
+let tlRecordSeconds = 0;
+let activeTLAudioEl = null;
+let activeTLPlayingId = null;
+
+function resetTLRecording(id) {
+  if (tlRecordMap[id]) {
+    if (tlRecordMap[id].url) {
+      URL.revokeObjectURL(tlRecordMap[id].url);
+    }
+    delete tlRecordMap[id];
+  }
+  if (activeTLPlayingId === id && activeTLAudioEl) {
+    activeTLAudioEl.pause();
+    activeTLAudioEl = null;
+    activeTLPlayingId = null;
+  }
+  renderTravaLinguas();
+}
+
+function handleTLRecordAction(id) {
+  const current = tlRecordMap[id] || { state: 'idle' };
+
+  if (current.state === 'idle') {
+    if (activeTLRecordingId && activeTLRecordingId !== id) {
+      stopTLVoiceRecording(activeTLRecordingId);
+    }
+    startTLVoiceRecording(id);
+  } else if (current.state === 'recording') {
+    stopTLVoiceRecording(id);
+  } else if (current.state === 'recorded') {
+    togglePlayTLRecordedAudio(id);
+  }
+}
+
+async function startTLVoiceRecording(id) {
+  try {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      alert("Seu navegador não suporta gravação direta.");
+      return;
+    }
+
+    // Parar qualquer gravação ou áudio do treino diário
+    stopActiveRecording();
+    stopActivePlayback();
+    if (activeTLAudioEl) {
+      activeTLAudioEl.pause();
+      activeTLAudioEl = null;
+      activeTLPlayingId = null;
+    }
+
+    tlAudioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+    let mimeType = 'audio/webm';
+    if (window.MediaRecorder && MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+      mimeType = 'audio/webm;codecs=opus';
+    } else if (window.MediaRecorder && MediaRecorder.isTypeSupported('audio/mp4')) {
+      mimeType = 'audio/mp4';
+    } else if (window.MediaRecorder && MediaRecorder.isTypeSupported('audio/ogg')) {
+      mimeType = 'audio/ogg';
+    }
+
+    tlMediaRecorder = new MediaRecorder(tlAudioStream, { mimeType: mimeType });
+    tlRecordedChunks = [];
+    activeTLRecordingId = id;
+    tlRecordSeconds = 0;
+
+    tlRecordMap[id] = {
+      state: 'recording',
+      seconds: 0,
+      blob: null,
+      url: null,
+      isPlaying: false
+    };
+
+    tlMediaRecorder.ondataavailable = (e) => {
+      if (e.data && e.data.size > 0) tlRecordedChunks.push(e.data);
+    };
+
+    tlMediaRecorder.onstop = () => {
+      const blob = new Blob(tlRecordedChunks, { type: mimeType });
+      const url = URL.createObjectURL(blob);
+      tlRecordMap[id] = {
+        state: 'recorded',
+        seconds: tlRecordSeconds,
+        blob: blob,
+        url: url,
+        isPlaying: false
+      };
+      activeTLRecordingId = null;
+      if (tlAudioStream) {
+        tlAudioStream.getTracks().forEach(t => t.stop());
+        tlAudioStream = null;
+      }
+      renderTravaLinguas();
+    };
+
+    tlMediaRecorder.start(200);
+    renderTravaLinguas();
+
+    if (tlTimerInterval) clearInterval(tlTimerInterval);
+    tlTimerInterval = setInterval(() => {
+      tlRecordSeconds++;
+      const recBtn = document.getElementById(`tl-rec-btn-${id}`);
+      if (recBtn) {
+        const mins = Math.floor(tlRecordSeconds / 60);
+        const secs = tlRecordSeconds % 60;
+        recBtn.innerHTML = `<span>⏹️</span> <span>Parar (${mins}:${secs < 10 ? '0' : ''}${secs})</span>`;
+      }
+    }, 1000);
+
+  } catch (err) {
+    console.error("Erro ao acessar microfone:", err);
+    alert("Não foi possível acessar o microfone. Verifique as permissões.");
+  }
+}
+
+function stopTLVoiceRecording(id) {
+  if (tlTimerInterval) {
+    clearInterval(tlTimerInterval);
+    tlTimerInterval = null;
+  }
+  if (tlMediaRecorder && tlMediaRecorder.state !== 'inactive') {
+    tlMediaRecorder.stop();
+  }
+}
+
+function togglePlayTLRecordedAudio(id) {
+  const rec = tlRecordMap[id];
+  if (!rec || !rec.url) return;
+
+  if (activeTLPlayingId === id && activeTLAudioEl && !activeTLAudioEl.paused) {
+    activeTLAudioEl.pause();
+    rec.isPlaying = false;
+    activeTLPlayingId = null;
+    renderTravaLinguas();
+  } else {
+    if (activeTLAudioEl) {
+      activeTLAudioEl.pause();
+      if (activeTLPlayingId && tlRecordMap[activeTLPlayingId]) {
+        tlRecordMap[activeTLPlayingId].isPlaying = false;
+      }
+    }
+    activeTLAudioEl = new Audio(rec.url);
+    activeTLPlayingId = id;
+    rec.isPlaying = true;
+    activeTLAudioEl.onended = () => {
+      rec.isPlaying = false;
+      activeTLPlayingId = null;
+      renderTravaLinguas();
+    };
+    activeTLAudioEl.play().catch(e => console.log('Audio playback error:', e));
+    renderTravaLinguas();
+  }
+}
 
 function renderTravaLinguas() {
   const container = document.getElementById('travalinguas-list');
@@ -643,6 +833,10 @@ function renderTravaLinguas() {
 
   filtered.forEach(item => {
     const isFav = appState.favoriteTravalinguas.includes(item.id);
+    const recData = tlRecordMap[item.id] || { state: 'idle' };
+    const itemRecState = recData.state;
+    const isPlaying = recData.isPlaying || false;
+
     const card = document.createElement('div');
     card.className = "p-5 rounded-2xl bg-slate-800/80 border border-slate-700/70 hover:border-indigo-500/50 transition";
 
@@ -676,13 +870,40 @@ function renderTravaLinguas() {
         <span>💡</span> <span>${item.dica}</span>
       </p>
 
-      <div class="flex items-center gap-2 pt-2 border-t border-slate-700/40">
-        <button onclick="playTrainingSpeech('${item.texto.replace(/'/g, "\\'")}')" class="flex-1 py-2 px-3 rounded-xl bg-slate-700 hover:bg-slate-600 text-xs font-semibold text-slate-200 flex items-center justify-center gap-1.5 transition">
-          <span>🔊</span> <span>Ouvir Dicção</span>
-        </button>
-        <button onclick="startTLChallenge('${item.id}')" class="flex-1 py-2 px-3 rounded-xl bg-indigo-600/80 hover:bg-indigo-600 text-xs font-semibold text-white flex items-center justify-center gap-1.5 transition">
-          <span>⚡</span> <span>Desafio 3x</span>
-        </button>
+      <div class="pt-3 border-t border-slate-700/40 space-y-2">
+        <div class="flex items-center gap-1.5">
+          <!-- Botão Gravar / Parar / Ouvir -->
+          <button id="tl-rec-btn-${item.id}" onclick="handleTLRecordAction('${item.id}')" class="flex-1 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition active:scale-95 shadow ${
+            itemRecState === 'recording'
+              ? 'bg-rose-600 hover:bg-rose-500 text-white animate-pulse'
+              : itemRecState === 'recorded'
+                ? (isPlaying ? 'bg-amber-600 hover:bg-amber-500 text-white' : 'bg-emerald-600 hover:bg-emerald-500 text-white')
+                : 'bg-indigo-600/90 hover:bg-indigo-600 text-white'
+          }">
+            <span>${itemRecState === 'recording' ? '⏹️' : itemRecState === 'recorded' ? (isPlaying ? '⏸️' : '▶️') : '🎙️'}</span>
+            <span>${itemRecState === 'recording' ? 'Parar' : itemRecState === 'recorded' ? (isPlaying ? 'Pausar' : 'Ouvir Minha Voz') : 'Gravar Áudio'}</span>
+          </button>
+
+          <!-- Botão Regravar (Apenas a seta circular ↺ com aviso) -->
+          <button id="tl-reset-btn-${item.id}" onclick="promptResetTLRecord('${item.id}')" title="Regravar trava-língua" class="w-9 h-9 rounded-xl flex items-center justify-center text-lg font-bold transition border active:scale-90 shrink-0 ${
+            itemRecState === 'recorded'
+              ? 'bg-slate-700 hover:bg-slate-600 text-slate-200 border-slate-600'
+              : 'bg-slate-800 text-slate-500 border-slate-700/60 opacity-50 cursor-not-allowed'
+          }">
+            ↺
+          </button>
+
+          <!-- Botão Desafio 3x -->
+          <button onclick="startTLChallenge('${item.id}')" class="py-2 px-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-500/30 text-xs font-bold flex items-center justify-center gap-1 transition active:scale-95 shrink-0">
+            <span>⚡</span> <span>Desafio 3x</span>
+          </button>
+        </div>
+
+        ${itemRecState === 'recorded' ? `
+          <div class="text-[10px] text-emerald-400 font-semibold flex items-center gap-1 px-1">
+            <span>✓</span> <span>Áudio gravado (${recData.seconds || 0}s)</span>
+          </div>
+        ` : ''}
       </div>
     `;
 
