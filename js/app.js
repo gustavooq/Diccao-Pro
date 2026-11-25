@@ -648,7 +648,7 @@ let activeTLRecordingId = null;
 let tlMediaRecorder = null;
 let tlAudioStream = null;
 let tlRecordedChunks = [];
-let tlTimerInterval = null;
+let tlVoiceTimerInterval = null;
 let tlRecordSeconds = 0;
 let activeTLAudioEl = null;
 let activeTLPlayingId = null;
@@ -748,8 +748,8 @@ async function startTLVoiceRecording(id) {
     tlMediaRecorder.start(200);
     renderTravaLinguas();
 
-    if (tlTimerInterval) clearInterval(tlTimerInterval);
-    tlTimerInterval = setInterval(() => {
+    if (tlVoiceTimerInterval) clearInterval(tlVoiceTimerInterval);
+    tlVoiceTimerInterval = setInterval(() => {
       tlRecordSeconds++;
       const recBtn = document.getElementById(`tl-rec-btn-${id}`);
       if (recBtn) {
@@ -766,9 +766,9 @@ async function startTLVoiceRecording(id) {
 }
 
 function stopTLVoiceRecording(id) {
-  if (tlTimerInterval) {
-    clearInterval(tlTimerInterval);
-    tlTimerInterval = null;
+  if (tlVoiceTimerInterval) {
+    clearInterval(tlVoiceTimerInterval);
+    tlVoiceTimerInterval = null;
   }
   if (tlMediaRecorder && tlMediaRecorder.state !== 'inactive') {
     tlMediaRecorder.stop();
