@@ -1450,6 +1450,21 @@ window.addEventListener('DOMContentLoaded', () => {
     link.classList.remove('hidden');
   }
 
+  // Pré-preenche código de acesso e nome caso venha direto da tela pós-compra (?codigo=...&nome=...)
+  try {
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlCode = (urlParams.get('codigo') || '').trim().toUpperCase();
+    const urlName = (urlParams.get('nome') || '').trim().slice(0, 30);
+    if (urlName && !appState.userName) {
+      const nameField = document.getElementById('onboarding-name');
+      if (nameField) nameField.value = urlName;
+    }
+    if (urlCode && needsAccessCode()) {
+      const gateInput = document.getElementById('gate-code');
+      if (gateInput) gateInput.value = urlCode;
+    }
+  } catch (_) {}
+
   if (needsAccessCode()) document.getElementById('gate').classList.remove('hidden');
   else showOnboardingIfNeeded();
 
