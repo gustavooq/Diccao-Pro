@@ -1,15 +1,52 @@
 # 🎙️ Voz & Dicção Pro (PWA)
 
-Aplicativo progressivo (PWA) para desenvolvimento de voz, dicção e articulação.
+Aplicativo progressivo (PWA) mobile-first para desenvolvimento de voz, dicção e articulação, pensado como produto digital pronto para venda sem necessidade de login ou servidor.
 
 ## 🚀 Funcionalidades
-- **Desafio 21 Dias:** Trilha de treino diário com passos guiados, cronômetro de 60s e comemoração.
-- **Trava-Línguas:** Biblioteca categorizada por fonema e nível com Desafio 3x de velocidade.
-- **Área Kids:** Exercícios lúdicos de fonoaudiologia infantil com estrelinhas de recompensa.
-- **100% PWA:** Funciona offline e pode ser instalado na tela de início (Android e iOS).
-- **Sem necessidade de login:** Progresso salvo localmente via `localStorage`.
+- **🔐 Código de Acesso:** Barreira de entrada configurável para clientes (ex.: código enviado após a compra na Hotmart/Kiwify).
+- **👋 Boas-vindas & Instalação Inteligente:** Onboarding personalizado com o nome do aluno e guia automático para instalar na tela de início (Android e iOS).
+- **🏆 Desafio 21 Dias:**
+  - Bloqueio progressivo real (`diario`, `sequencial` ou `livre`), sequência diária (🔥) no fuso horário local e cronômetro de 60s.
+  - **Gravador de Voz Integrado:** Gravações salvas no próprio aparelho via `IndexedDB` (com aviso de segurança ao regravar `↺`).
+  - **📈 Minha Evolução (Antes x Depois):** Compara lado a lado o áudio do Dia 1 com a gravação mais recente.
+  - **🎓 Certificado de Conclusão:** Gera imagem em alta resolução (1080×1350) personalizada com o nome do aluno para baixar ou compartilhar no Dia 21.
+- **⚡ Trava-Línguas:** Biblioteca com busca, filtros, favoritos (⭐), gravador próprio por card e **Desafio 3x** com salvamento de recorde de tempo.
+- **🎈 Área Kids:** Tema claro e lúdico com orientação para os pais, exercícios de fonoaudiologia em formato de brincadeira e conquista de estrelas.
+- **⚙️ Configurações & Backup:** Exportação e restauração do progresso em arquivo `.json`, além de opção de reiniciar a jornada.
+- **📴 100% PWA & Offline:** Tailwind CSS compilado localmente (`css/app.css`) + Service Worker (`sw.js`) e `manifest.json`.
 
-## 🛠️ Tecnologias
-- HTML5, Tailwind CSS, JavaScript Puro
-- Web Audio API (sons nativos) & Web Speech API (síntese vocal)
-- Service Worker & Web App Manifest
+## 🛠️ Onde personalizar seu conteúdo
+Todo o conteúdo e as regras do produto ficam centralizados em `js/conteudo.js`:
+- **`config.modoLiberacao`:** `"diario"` (1 treino novo por dia), `"sequencial"` (libera ao concluir o anterior) ou `"livre"` (todos abertos).
+- **`config.codigoAcesso`:** ative/desative (`ativo: true/false`) e defina a lista de `codigos` válidos (padrão: `DICCAO21` e `VOZPRO2026`).
+- **`desafio21`, `travaLinguas` e `kids`:** edite textos, dicas e passos livremente.
+
+## 🎨 Como atualizar o CSS (caso mude classes visuais)
+Se alterar classes Tailwind no `index.html` ou nos arquivos `.js`, gere novamente o arquivo `css/app.css` rodando no PowerShell:
+
+```powershell
+.\build-css.ps1
+```
+
+## 📂 Estrutura de Pastas
+```text
+app-diccao/
+├── index.html          # Interface principal e modais
+├── manifest.json       # Configuração PWA (standalone)
+├── sw.js               # Service Worker (cache offline)
+├── build-css.ps1       # Script para compilar o Tailwind CSS
+├── tailwind.config.js  # Configuração do Tailwind
+├── css/
+│   ├── input.css       # Entrada do Tailwind
+│   ├── app.css         # CSS final compilado e minificado
+│   └── custom.css      # Ajustes mobile, safe-area e tema Kids
+├── js/
+│   ├── conteudo.js     # Textos, configurações e códigos de acesso
+│   ├── db.js           # Persistência de áudios no IndexedDB
+│   ├── recorder.js     # Componente unificado de gravação de voz
+│   └── app.js          # Lógica geral do aplicativo
+└── assets/
+    ├── icons/          # Ícones PWA (192x192 e 512x512)
+    ├── audio/          # Pasta opcional para áudios próprios
+    └── img/            # Pasta opcional para imagens
+```

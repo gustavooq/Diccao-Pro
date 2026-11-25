@@ -1,60 +1,69 @@
-const CACHE_NAME = 'diccao-pro-v4';
-const ASSETS_TO_CACHE = [
+const CACHE_NAME = 'diccao-pro-v5';
+const ASSETS = [
   './',
   './index.html',
   './manifest.json',
+  './css/app.css',
   './css/custom.css',
   './js/conteudo.js',
+  './js/db.js',
+  './js/recorder.js',
   './js/app.js',
   './assets/icons/icon-192.png',
   './assets/icons/icon-512.png'
 ];
 
-// Instalação do Service Worker e Cache dos arquivos essenciais
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS_TO_CACHE);
-    }).then(() => self.skipWaiting())
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS)).then(() => self.skipWaiting())
   );
 });
 
-// Ativação e limpeza de caches antigos
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.map((cache) => {
-          if (cache !== CACHE_NAME) {
-            return caches.delete(cache);
-          }
-        })
-      );
-    }).then(() => self.clients.claim())
+    caches.keys()
+      .then((names) => Promise.all(names.filter((n) => n !== CACHE_NAME).map((n) => caches.delete(n))))
+      .then(() => self.clients.claim())
   );
 });
 
-// Estratégia de Fetch: Stale-While-Revalidate (carrega do cache e atualiza em segundo plano)
 self.addEventListener('fetch', (event) => {
-  // Ignora requisições de áudios externos ou outras origens que não sejam GET
-  if (event.request.method !== 'GET') return;
+  const req = event.request;
+  if (req.method !== 'GET') return;
+  const url = new URL(req.url);
 
+  // Arquivos do próprio app: rede primeiro (sempre a versão mais nova), cache se estiver offline
+  if (url.origin === self.location.origin) {
+    event.respondWith(
+      fetch(req)
+        .then((res) => {
+          if (res.status === 200) {
+            const copy = res.clone();
+            caches.open(CACHE_NAME).then((c) => c.put(req, copy));
+          }
+          return res;
+        })
+        .catch(() =>
+          caches.match(req, { ignoreSearch: true }).then(
+            (cached) => cached || (req.mode === 'navigate' ? caches.match('./index.html') : undefined)
+          )
+        )
+    );
+    return;
+  }
+
+  // Recursos externos (fontes): cache primeiro
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      const fetchPromise = fetch(event.request).then((networkResponse) => {
-        if (networkResponse && networkResponse.status === 200) {
-          const responseToCache = networkResponse.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, responseToCache);
-          });
-        }
-        return networkResponse;
-      }).catch(() => {
-        // Se estiver offline e sem cache
-        return cachedResponse;
-      });
-
-      return cachedResponse || fetchPromise;
-    })
+    caches.match(req).then(
+      (cached) =>
+        cached ||
+        fetch(req).then((res) => {
+          if (res.status === 200 || res.type === 'opaque') {
+            const copy = res.clone();
+            caches.open(CACHE_NAME).then((c) => c.put(req, copy));
+          }
+          return res;
+        }).catch(() => cached)
+    )
   );
 });

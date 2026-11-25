@@ -1,4 +1,4 @@
-/* Estilos adicionais e suporte a PWA Mobile */
+/* Estilos adicionais e suporte a PWA mobile */
 
 :root {
   --sat: env(safe-area-inset-top, 0px);
@@ -6,39 +6,51 @@
 }
 
 body {
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   padding-top: var(--sat);
-  padding-bottom: calc(var(--sab) + 70px);
   -webkit-tap-highlight-color: transparent;
   user-select: none;
+  -webkit-user-select: none;
 }
 
-/* Permitir seleção nos textos de treino */
-.selectable {
+/* Permitir selecionar textos de treino e campos */
+.selectable,
+input {
   user-select: text;
+  -webkit-user-select: text;
 }
 
-/* Glassmorphism */
-.glass-panel {
-  background: rgba(30, 41, 59, 0.7);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+/* Espaço para a barra inferior respeitando o "notch" do iPhone */
+.nav-safe {
+  padding-bottom: calc(10px + var(--sab));
+}
+.nav-safe-pad {
+  padding-bottom: calc(1rem + var(--sab));
 }
 
 .glass-nav {
-  background: rgba(15, 23, 42, 0.85);
+  background: rgba(15, 23, 42, 0.9);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-/* Scrollbar estilizada */
+/* Tema claro da área Kids */
+.kids-theme {
+  background: linear-gradient(180deg, #fff7ed 0%, #fef3c7 45%, #e0f2fe 100%);
+  color: #1e293b;
+}
+
+/* Rolagem */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  scrollbar-width: none;
+}
 ::-webkit-scrollbar {
   width: 4px;
   height: 4px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
 }
 ::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.15);
@@ -47,10 +59,9 @@ body {
 
 /* Animações */
 @keyframes popIn {
-  0% { transform: scale(0.92); opacity: 0; }
+  0% { transform: scale(0.96); opacity: 0; }
   100% { transform: scale(1); opacity: 1; }
 }
-
 .animate-pop {
   animation: popIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
@@ -59,16 +70,28 @@ body {
   0%, 100% { box-shadow: 0 0 15px rgba(99, 102, 241, 0.3); }
   50% { box-shadow: 0 0 25px rgba(99, 102, 241, 0.6); }
 }
-
 .pulse-glow {
   animation: pulseGlow 2.5s infinite;
 }
 
-/* Canvas de Confete fixo por cima de tudo */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-8px); }
+  40%, 80% { transform: translateX(8px); }
+}
+.shake {
+  animation: shake 0.4s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-pop, .pulse-glow, .shake, .animate-pulse {
+    animation: none !important;
+  }
+}
+
 #confetti-canvas {
   position: fixed;
-  top: 0;
-  left: 0;
+  inset: 0;
   width: 100vw;
   height: 100vh;
   pointer-events: none;

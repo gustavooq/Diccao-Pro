@@ -2,440 +2,367 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Voz & Dicção Pro • Desafio 21 Dias</title>
+  <meta name="description" content="Treinos diários de dicção, Desafio 21 Dias, trava-línguas e área kids.">
 
-  <!-- PWA Meta Tags -->
+  <!-- PWA -->
   <link rel="manifest" href="./manifest.json">
-  <meta name="theme-color" content="#4f46e5">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="DicçãoPro">
   <link rel="apple-touch-icon" href="./assets/icons/icon-192.png">
+  <link rel="icon" type="image/png" href="./assets/icons/icon-192.png">
 
-  <!-- Tailwind CSS & Google Fonts -->
-  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Fontes -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
-  <!-- Custom CSS -->
-  <link rel="stylesheet" href="./css/custom.css">
-
-  <style>
-    body {
-      font-family: 'Plus Jakarta Sans', sans-serif;
-    }
-  </style>
+  <!-- CSS gerado (Tailwind compilado, funciona offline) -->
+  <link rel="stylesheet" href="./css/app.css?v=5">
+  <link rel="stylesheet" href="./css/custom.css?v=5">
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen antialiased flex justify-center">
 
-  <!-- Canvas para Confetes de Comemoração -->
   <canvas id="confetti-canvas"></canvas>
 
-  <!-- Container Mobile Centralizado (Simula App nativo no Desktop) -->
   <div class="w-full max-w-md min-h-screen bg-slate-900 shadow-2xl relative flex flex-col border-x border-slate-800">
 
-    <!-- ========================================== -->
-    <!-- CABEÇALHO SUPERIOR (TOP BAR) -->
-    <!-- ========================================== -->
+    <!-- ================= CABEÇALHO ================= -->
     <header class="sticky top-0 z-40 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 px-4 py-3 flex items-center justify-between">
-      <div class="flex items-center gap-2.5">
-        <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center text-lg shadow-md shadow-indigo-500/20">
-          🎙️
-        </div>
-        <div>
+      <div class="flex items-center gap-2.5 min-w-0">
+        <img src="./assets/icons/icon-192.png" alt="" class="w-9 h-9 rounded-xl shadow-md shadow-indigo-500/20">
+        <div class="min-w-0">
           <h1 class="font-black text-sm text-slate-100 leading-tight">Voz & Dicção Pro</h1>
-          <p class="text-[10px] text-indigo-400 font-semibold tracking-wide uppercase">Desafio Diário</p>
+          <p id="header-greeting" class="text-[11px] text-indigo-400 font-semibold truncate">Desafio diário</p>
         </div>
       </div>
 
-      <div class="flex items-center gap-2">
-        <!-- Sequência (Streak 🔥) -->
-        <div class="bg-slate-800/90 border border-slate-700/80 px-2.5 py-1 rounded-full flex items-center gap-1.5 shadow-sm">
+      <div class="flex items-center gap-1.5">
+        <div class="bg-slate-800/90 border border-slate-700/80 px-2.5 py-1 rounded-full flex items-center gap-1" title="Dias seguidos treinando">
           <span class="text-sm">🔥</span>
           <span id="streak-count" class="text-xs font-black text-amber-400">0d</span>
         </div>
-
-        <!-- Botão Instalar App -->
-        <button onclick="openInstallModal()" class="bg-indigo-600/90 hover:bg-indigo-600 text-white text-xs font-bold px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-md shadow-indigo-600/20 transition transform active:scale-95">
-          <span>📲</span>
-          <span>App</span>
+        <button id="install-btn" onclick="openInstallModal()" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold px-3 py-1.5 rounded-full flex items-center gap-1 transition active:scale-95">
+          <span>📲</span><span>App</span>
         </button>
+        <button onclick="openSettingsModal()" aria-label="Configurações" class="w-8 h-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-sm hover:bg-slate-700 transition">⚙️</button>
       </div>
     </header>
 
-    <!-- Banner Discreto de Instalação (se PWA pronto) -->
-    <div id="pwa-install-banner" class="hidden bg-gradient-to-r from-indigo-900/90 to-purple-900/90 border-b border-indigo-700/50 px-4 py-2 flex items-center justify-between text-xs animate-pop">
-      <div class="flex items-center gap-2 text-indigo-200">
-        <span>✨</span>
-        <span>Adicione o app à sua tela de início!</span>
-      </div>
-      <button onclick="installPWA()" class="bg-white text-indigo-950 font-black px-2.5 py-1 rounded-lg text-[11px] shadow">
-        Instalar
-      </button>
+    <div id="pwa-install-banner" class="hidden bg-gradient-to-r from-indigo-900/90 to-purple-900/90 border-b border-indigo-700/50 px-4 py-2 flex items-center justify-between text-xs">
+      <div class="flex items-center gap-2 text-indigo-200"><span>✨</span><span>Instale o app na sua tela de início!</span></div>
+      <button onclick="installPWA()" class="bg-white text-indigo-950 font-black px-2.5 py-1 rounded-lg text-xs">Instalar</button>
     </div>
 
-    <!-- ========================================== -->
-    <!-- CONTEÚDO PRINCIPAL (3 ABAS) -->
-    <!-- ========================================== -->
-    <main class="flex-1 p-4 pb-24 overflow-y-auto">
+    <!-- ================= CONTEÚDO ================= -->
+    <main class="flex-1 p-4 pb-24">
 
-      <!-- ======================================== -->
-      <!-- ABA 1: DESAFIO 21 DIAS -->
-      <!-- ======================================== -->
+      <!-- ===== ABA 1: DESAFIO 21 DIAS ===== -->
       <section id="tab-desafio" class="tab-content animate-pop">
-        
-        <!-- Card de Progresso Geral -->
-        <div class="p-5 rounded-3xl bg-gradient-to-br from-indigo-950/80 via-slate-800/90 to-purple-950/70 border border-indigo-500/30 shadow-xl mb-6 relative overflow-hidden">
-          <div class="relative z-10">
-            <div class="flex justify-between items-center mb-2">
-              <span class="text-xs font-bold text-indigo-300 uppercase tracking-wider">Seu Progresso Total</span>
-              <span id="progress-text" class="text-xs font-extrabold text-indigo-200 bg-indigo-500/20 px-2 py-0.5 rounded-full">0/21 Dias (0%)</span>
-            </div>
-            
-            <!-- Barra de Progresso Animada -->
-            <div class="w-full h-3 bg-slate-800 rounded-full overflow-hidden border border-slate-700/60 mb-3">
-              <div id="progress-bar" class="h-full bg-gradient-to-r from-indigo-500 via-purple-500 to-emerald-400 transition-all duration-700 rounded-full" style="width: 0%;"></div>
-            </div>
-
-            <p class="text-xs text-slate-300 font-medium leading-relaxed">
-              Pratique <span class="text-indigo-300 font-bold">5 minutos ao dia</span>. Repita cada exercício em voz alta para destravar os músculos da fala!
-            </p>
+        <div class="p-5 rounded-3xl bg-gradient-to-br from-indigo-950/80 via-slate-800/90 to-purple-950/70 border border-indigo-500/30 shadow-xl mb-6">
+          <div class="flex justify-between items-center mb-2">
+            <span class="text-xs font-bold text-indigo-300 uppercase tracking-wider">Seu progresso</span>
+            <span id="progress-text" class="text-xs font-extrabold text-indigo-200 bg-indigo-500/20 px-2 py-0.5 rounded-full">0/21 dias (0%)</span>
           </div>
+          <div class="w-full h-3 bg-slate-800 rounded-full overflow-hidden border border-slate-700/60 mb-3">
+            <div id="progress-bar" class="h-full bg-gradient-to-r from-indigo-500 via-purple-500 to-emerald-400 transition-all duration-700 rounded-full" style="width: 0%;"></div>
+          </div>
+          <p class="text-xs text-slate-300 font-medium leading-relaxed">
+            Pratique <span class="text-indigo-300 font-bold">5 minutos por dia</span>. Um novo treino é liberado a cada dia. Faça em voz alta!
+          </p>
         </div>
 
-        <!-- Título da Trilha -->
+        <div id="certificado-card"></div>
+        <div id="evolucao-card"></div>
+
         <div class="flex items-center justify-between mb-4">
-          <h2 class="text-base font-extrabold text-slate-100 flex items-center gap-2">
-            <span>🏆</span> <span>Trilha dos 21 Dias</span>
-          </h2>
-          <span class="text-xs text-slate-400 font-medium">Toque no dia para treinar</span>
+          <h2 class="text-base font-extrabold text-slate-100 flex items-center gap-2"><span>🏆</span><span>Trilha dos 21 dias</span></h2>
+          <span class="text-xs text-slate-400">Toque para treinar</span>
         </div>
 
-        <!-- Grade com os 21 Cards Diários -->
-        <div id="desafio-grid" class="grid grid-cols-1 gap-3">
-          <!-- Gerado dinamicamente pelo app.js -->
-        </div>
+        <div id="desafio-grid" class="grid grid-cols-1 gap-3"></div>
+
+        <p id="legal-notice" class="text-[11px] text-slate-500 leading-relaxed mt-6 text-center px-2"></p>
       </section>
 
-      <!-- ======================================== -->
-      <!-- ABA 2: TRAVA-LÍNGUAS -->
-      <!-- ======================================== -->
+      <!-- ===== ABA 2: TRAVA-LÍNGUAS ===== -->
       <section id="tab-travalinguas" class="tab-content hidden animate-pop">
-        
         <div class="mb-4">
-          <h2 class="text-lg font-black text-slate-100 mb-1 flex items-center gap-2">
-            <span>⚡</span> <span>Treino com Trava-Línguas</span>
-          </h2>
-          <p class="text-xs text-slate-400">Escolha um trava-língua, ouça a dicção e teste falar 3x no cronômetro!</p>
+          <h2 class="text-lg font-black text-slate-100 mb-1 flex items-center gap-2"><span>⚡</span><span>Treino com trava-línguas</span></h2>
+          <p class="text-xs text-slate-400">Grave sua voz, ouça e tente bater seu recorde no Desafio 3x!</p>
         </div>
 
-        <!-- Campo de Busca -->
         <div class="relative mb-3">
-          <input type="text" id="tl-search" placeholder="Buscar trava-língua ou letra..." 
-            class="w-full bg-slate-800/90 border border-slate-700/80 rounded-2xl py-2.5 pl-10 pr-4 text-xs text-slate-100 placeholder-slate-400 focus:outline-none focus:border-indigo-500">
-          <span class="absolute left-3.5 top-2.5 text-slate-400 text-xs">🔍</span>
+          <input type="search" id="tl-search" placeholder="Buscar trava-língua ou letra (ex: R)..."
+            class="w-full bg-slate-800/90 border border-slate-700/80 rounded-2xl py-2.5 pl-10 pr-4 text-sm text-slate-100 placeholder-slate-400 focus:outline-none focus:border-indigo-500">
+          <span class="absolute left-3.5 top-2.5 text-slate-400 text-sm">🔍</span>
         </div>
 
-        <!-- Filtros Rápidos -->
         <div class="flex gap-1.5 overflow-x-auto pb-2 mb-4 text-xs no-scrollbar">
-          <button id="filter-tl-todos" onclick="filterTravaLinguas('todos')" class="tl-filter-btn px-3 py-1.5 rounded-full bg-indigo-600 text-white font-bold whitespace-nowrap transition">
-            Todos
-          </button>
-          <button id="filter-tl-favoritos" onclick="filterTravaLinguas('favoritos')" class="tl-filter-btn px-3 py-1.5 rounded-full bg-slate-800 text-slate-300 font-semibold whitespace-nowrap transition flex items-center gap-1">
-            <span>⭐</span> <span>Favoritos</span>
-          </button>
-          <button id="filter-tl-facil" onclick="filterTravaLinguas('facil')" class="tl-filter-btn px-3 py-1.5 rounded-full bg-slate-800 text-slate-300 font-semibold whitespace-nowrap transition">
-            Fáceis
-          </button>
-          <button id="filter-tl-medio" onclick="filterTravaLinguas('medio')" class="tl-filter-btn px-3 py-1.5 rounded-full bg-slate-800 text-slate-300 font-semibold whitespace-nowrap transition">
-            Médios
-          </button>
-          <button id="filter-tl-dificil" onclick="filterTravaLinguas('dificil')" class="tl-filter-btn px-3 py-1.5 rounded-full bg-slate-800 text-slate-300 font-semibold whitespace-nowrap transition">
-            Difíceis 🔥
-          </button>
+          <button id="filter-tl-todos" onclick="filterTravaLinguas('todos')" class="tl-filter-btn px-3 py-1.5 rounded-full bg-indigo-600 text-white font-bold whitespace-nowrap transition">Todos</button>
+          <button id="filter-tl-favoritos" onclick="filterTravaLinguas('favoritos')" class="tl-filter-btn px-3 py-1.5 rounded-full bg-slate-800 text-slate-300 font-semibold whitespace-nowrap transition">⭐ Favoritos</button>
+          <button id="filter-tl-facil" onclick="filterTravaLinguas('facil')" class="tl-filter-btn px-3 py-1.5 rounded-full bg-slate-800 text-slate-300 font-semibold whitespace-nowrap transition">Fáceis</button>
+          <button id="filter-tl-medio" onclick="filterTravaLinguas('medio')" class="tl-filter-btn px-3 py-1.5 rounded-full bg-slate-800 text-slate-300 font-semibold whitespace-nowrap transition">Médios</button>
+          <button id="filter-tl-dificil" onclick="filterTravaLinguas('dificil')" class="tl-filter-btn px-3 py-1.5 rounded-full bg-slate-800 text-slate-300 font-semibold whitespace-nowrap transition">Difíceis 🔥</button>
         </div>
 
-        <!-- Lista de Trava-línguas -->
-        <div id="travalinguas-list" class="space-y-3">
-          <!-- Injetado dinamicamente pelo app.js -->
-        </div>
+        <div id="travalinguas-list" class="space-y-3"></div>
       </section>
 
-      <!-- ======================================== -->
-      <!-- ABA 3: KIDS (ÁREA INFANTIL) -->
-      <!-- ======================================== -->
+      <!-- ===== ABA 3: KIDS (tema claro) ===== -->
       <section id="tab-kids" class="tab-content hidden animate-pop">
-        
-        <!-- Card Lúdico de Apresentação Kids -->
-        <div class="p-5 rounded-3xl bg-gradient-to-br from-amber-500/20 via-orange-500/15 to-purple-500/20 border border-amber-500/40 shadow-xl mb-4 text-center relative overflow-hidden">
-          <div class="flex justify-center mb-1 text-4xl">🎪</div>
-          <h2 class="text-lg font-black text-amber-300 mb-1">Clube da Voz Divertida</h2>
-          <p class="text-xs text-slate-300 font-medium mb-3">Exercícios de fonoaudiologia brincando como animais e super-heróis!</p>
-          
-          <div class="inline-flex items-center gap-2 bg-slate-900/80 px-3.5 py-1.5 rounded-full border border-amber-500/40">
-            <span class="text-xs text-amber-400 font-black">Suas Estrelas:</span>
-            <span id="kids-stars-count" class="text-xs font-black text-amber-300">0 ⭐</span>
+        <div class="kids-theme rounded-3xl p-4 -mx-1">
+          <div class="p-5 rounded-3xl bg-white/80 border-2 border-amber-200 mb-4 text-center shadow-sm">
+            <div class="text-4xl mb-1">🎪</div>
+            <h2 class="text-xl font-black text-orange-500 mb-1">Clube da Voz Divertida</h2>
+            <p class="text-sm text-slate-600 font-medium mb-3">Treine a fala brincando como os bichos!</p>
+            <div class="inline-flex items-center gap-2 bg-amber-100 px-4 py-1.5 rounded-full border border-amber-300">
+              <span class="text-sm text-amber-700 font-black">Suas estrelas:</span>
+              <span id="kids-stars-count" class="text-sm font-black text-amber-700">0 ⭐</span>
+            </div>
           </div>
-        </div>
 
-        <!-- Seletor de Categoria Kids -->
-        <div class="grid grid-cols-3 gap-2 mb-4">
-          <button id="kids-btn-bichos" onclick="switchKidsCategory('bichos')" class="kids-cat-btn py-2 px-1 text-[11px] font-black rounded-2xl bg-amber-500 text-slate-950 transition text-center shadow-md">
-            🦁 Bichos
-          </button>
-          <button id="kids-btn-respiracao" onclick="switchKidsCategory('respiracao')" class="kids-cat-btn py-2 px-1 text-[11px] font-semibold rounded-2xl bg-slate-800 text-slate-300 transition text-center">
-            🎈 Respiração
-          </button>
-          <button id="kids-btn-travalinguas" onclick="switchKidsCategory('travalinguas')" class="kids-cat-btn py-2 px-1 text-[11px] font-semibold rounded-2xl bg-slate-800 text-slate-300 transition text-center">
-            🎪 Trava-Língua
-          </button>
-        </div>
+          <div class="p-3 rounded-2xl bg-sky-100 border border-sky-200 text-sky-900 text-xs leading-relaxed mb-4 flex gap-2">
+            <span class="text-base">👨‍👩‍👧</span>
+            <span><b>Para os pais:</b> façam os exercícios junto com a criança, como uma brincadeira, por 5 a 10 minutos. Elogie cada tentativa! Se a dificuldade na fala persistir, procure um(a) fonoaudiólogo(a).</span>
+          </div>
 
-        <!-- Lista Kids -->
-        <div id="kids-content-list" class="space-y-3">
-          <!-- Injetado dinamicamente pelo app.js -->
+          <div class="grid grid-cols-3 gap-2 mb-4">
+            <button id="kids-btn-bichos" onclick="switchKidsCategory('bichos')" class="kids-cat-btn py-2.5 px-1 text-xs font-black rounded-2xl bg-amber-500 text-white shadow-md transition text-center">🦁 Bichos</button>
+            <button id="kids-btn-respiracao" onclick="switchKidsCategory('respiracao')" class="kids-cat-btn py-2.5 px-1 text-xs font-bold rounded-2xl bg-white text-slate-600 border border-amber-200 transition text-center">🎈 Respiração</button>
+            <button id="kids-btn-travalinguas" onclick="switchKidsCategory('travalinguas')" class="kids-cat-btn py-2.5 px-1 text-xs font-bold rounded-2xl bg-white text-slate-600 border border-amber-200 transition text-center">🎪 Trava-língua</button>
+          </div>
+
+          <div id="kids-content-list" class="space-y-3"></div>
         </div>
       </section>
-
     </main>
 
-    <!-- ========================================== -->
-    <!-- BARRA DE NAVEGAÇÃO INFERIOR (BOTTOM BAR) -->
-    <!-- ========================================== -->
-    <nav class="fixed bottom-0 w-full max-w-md z-40 glass-nav flex items-center justify-around py-2.5 px-3">
-      <!-- Botão Desafio -->
-      <button id="btn-desafio" onclick="switchTab('desafio')" class="nav-btn flex-1 flex flex-col items-center justify-center gap-1 text-indigo-400 font-bold transition transform active:scale-95">
-        <span class="text-xl">🏆</span>
-        <span class="text-[10px]">Desafio 21D</span>
+    <!-- ================= NAVEGAÇÃO INFERIOR ================= -->
+    <nav class="fixed bottom-0 w-full max-w-md z-40 glass-nav flex items-center justify-around pt-2.5 px-3 nav-safe">
+      <button id="btn-desafio" onclick="switchTab('desafio')" class="nav-btn flex-1 flex flex-col items-center gap-1 text-indigo-400 font-bold transition active:scale-95">
+        <span class="text-xl">🏆</span><span class="text-[11px]">Desafio 21D</span>
       </button>
-
-      <!-- Botão Trava-Línguas -->
-      <button id="btn-travalinguas" onclick="switchTab('travalinguas')" class="nav-btn flex-1 flex flex-col items-center justify-center gap-1 text-slate-400 font-semibold transition transform active:scale-95">
-        <span class="text-xl">⚡</span>
-        <span class="text-[10px]">Trava-Línguas</span>
+      <button id="btn-travalinguas" onclick="switchTab('travalinguas')" class="nav-btn flex-1 flex flex-col items-center gap-1 text-slate-400 font-semibold transition active:scale-95">
+        <span class="text-xl">⚡</span><span class="text-[11px]">Trava-Línguas</span>
       </button>
-
-      <!-- Botão Kids -->
-      <button id="btn-kids" onclick="switchTab('kids')" class="nav-btn flex-1 flex flex-col items-center justify-center gap-1 text-slate-400 font-semibold transition transform active:scale-95">
-        <span class="text-xl">🎈</span>
-        <span class="text-[10px]">Kids</span>
+      <button id="btn-kids" onclick="switchTab('kids')" class="nav-btn flex-1 flex flex-col items-center gap-1 text-slate-400 font-semibold transition active:scale-95">
+        <span class="text-xl">🎈</span><span class="text-[11px]">Kids</span>
       </button>
     </nav>
 
-    <!-- ========================================== -->
-    <!-- MODAL DO TREINO DO DIA (FULL DETAILS) -->
-    <!-- ========================================== -->
-    <div id="day-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 animate-pop">
-      <div class="w-full max-w-md bg-slate-900 border-t sm:border border-slate-700/80 rounded-t-3xl sm:rounded-3xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
-        
-        <!-- Header do Modal -->
-        <div class="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/90">
+    <!-- ================= MODAL: TREINO DO DIA ================= -->
+    <div id="day-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-end sm:items-center justify-center sm:p-4 animate-pop">
+      <div class="w-full max-w-md bg-slate-900 border-t sm:border border-slate-700/80 rounded-t-3xl sm:rounded-3xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
+        <div class="p-4 border-b border-slate-800 flex items-start justify-between gap-3">
           <div>
-            <span id="modal-day-badge" class="text-[10px] font-black uppercase tracking-wider text-indigo-400 bg-indigo-500/20 px-2 py-0.5 rounded-full">
-              DIA 01 • SEMANA 1
-            </span>
-            <h3 id="modal-title" class="font-extrabold text-slate-100 text-base mt-1">Título do Dia</h3>
-            <p id="modal-focus" class="text-xs text-slate-400 mt-0.5">Foco</p>
+            <span id="modal-day-badge" class="text-[11px] font-black uppercase tracking-wider text-indigo-400 bg-indigo-500/20 px-2 py-0.5 rounded-full">DIA 1</span>
+            <h3 id="modal-title" class="font-extrabold text-slate-100 text-base mt-1"></h3>
+            <p id="modal-focus" class="text-xs text-slate-400 mt-0.5"></p>
           </div>
-          <button onclick="closeDayModal()" class="w-8 h-8 rounded-full bg-slate-800 text-slate-300 flex items-center justify-center font-bold hover:bg-slate-700 transition">
-            ✕
-          </button>
+          <button onclick="closeDayModal()" aria-label="Fechar" class="w-8 h-8 shrink-0 rounded-full bg-slate-800 text-slate-300 flex items-center justify-center font-bold hover:bg-slate-700 transition">✕</button>
         </div>
 
-        <!-- Corpo com Rolagem -->
         <div class="p-5 overflow-y-auto space-y-4">
-          
-          <!-- Dica Teórica -->
-          <div class="p-3.5 rounded-2xl bg-indigo-950/40 border border-indigo-500/30 text-xs text-indigo-200 leading-relaxed flex items-start gap-2.5">
+          <div class="p-3.5 rounded-2xl bg-indigo-950/40 border border-indigo-500/30 text-sm text-indigo-200 leading-relaxed flex items-start gap-2.5">
             <span class="text-lg shrink-0">💡</span>
             <p id="modal-tip"></p>
           </div>
 
-          <!-- Passos do Exercício -->
           <div>
-            <h4 class="text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">Como Fazer o Treino:</h4>
+            <h4 class="text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">Como fazer o treino</h4>
             <ul id="modal-steps" class="space-y-2"></ul>
           </div>
 
-          <!-- Frase de Treino em Destaque -->
           <div>
-            <h4 class="text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">Frase de Treino Diário:</h4>
-            <div class="p-4 rounded-2xl bg-slate-950 border border-slate-800 text-slate-100 font-medium text-sm leading-relaxed selectable text-center" id="modal-training-phrase">
-              "..."
-            </div>
+            <h4 class="text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">Frase de treino</h4>
+            <div id="modal-training-phrase" class="p-4 rounded-2xl bg-slate-950 border border-slate-800 text-slate-100 font-medium text-base leading-relaxed selectable text-center"></div>
           </div>
 
-          <!-- Ferramentas Rápidas (Gravador de Voz & Timer 60s) -->
-          <div class="space-y-2.5 pt-1">
-            <!-- Bloco do Gravador de Voz do Usuário -->
-            <div class="p-3.5 rounded-2xl bg-slate-800/80 border border-slate-700/80">
-              <div class="flex items-center justify-between mb-2">
-                <span class="text-[11px] font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                  <span>🎙️</span> <span>Sua Autoavaliação</span>
-                </span>
-                <span id="record-status-label" class="text-[10px] font-semibold text-slate-400">Grave sua fala</span>
-              </div>
-
-              <div class="flex items-center gap-2">
-                <!-- Botão Principal de Ação (Gravar / Parar / Ouvir) -->
-                <button id="modal-record-btn" onclick="handleRecordAction()" class="flex-1 py-2.5 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold flex items-center justify-center gap-2 transition active:scale-95 shadow-md">
-                  <span id="record-btn-icon">🎙️</span>
-                  <span id="record-btn-text">Gravar Áudio</span>
-                </button>
-
-                <!-- Botão Regravar (Apenas a seta circular ↺ com aviso) -->
-                <button id="modal-rerecord-btn" onclick="promptResetRecording()" title="Regravar áudio" class="w-10 h-10 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-300 flex items-center justify-center text-xl font-bold transition border border-slate-600 active:scale-90 shrink-0">
-                  ↺
-                </button>
-              </div>
-
-              <!-- Elemento de áudio interno -->
-              <audio id="modal-recorded-audio" class="hidden"></audio>
-            </div>
-
-            <!-- Cronômetro de Prática (60s) -->
-            <div class="flex items-center justify-between bg-slate-800/60 border border-slate-700/50 px-4 py-2.5 rounded-2xl">
-              <span class="text-xs text-slate-300 font-semibold flex items-center gap-1.5">
-                <span>⏱️</span> <span>Tempo de Prática:</span>
-              </span>
-              <div class="flex items-center gap-2.5">
-                <span id="timer-display" class="text-xs font-black text-indigo-400">60s</span>
-                <button id="timer-btn" onclick="toggleWorkoutTimer()" class="py-1 px-3 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-lg transition active:scale-95">
-                  Iniciar
-                </button>
-              </div>
-            </div>
+          <div class="p-3.5 rounded-2xl bg-slate-800/80 border border-slate-700/80">
+            <p class="text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">🎙️ Sua autoavaliação</p>
+            <div id="modal-rec-slot"></div>
           </div>
 
+          <div class="flex items-center justify-between bg-slate-800/60 border border-slate-700/50 px-4 py-2.5 rounded-2xl">
+            <span class="text-xs text-slate-300 font-semibold">⏱️ Tempo de prática</span>
+            <div class="flex items-center gap-2.5">
+              <span id="timer-display" class="text-sm font-black text-indigo-400">60s</span>
+              <button id="timer-btn" onclick="toggleWorkoutTimer()" class="py-1 px-3 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-lg transition active:scale-95">Iniciar</button>
+            </div>
+          </div>
         </div>
 
-        <!-- Rodapé do Modal -->
-        <div class="p-4 border-t border-slate-800 bg-slate-900">
-          <button id="modal-complete-btn" class="w-full py-3.5 px-4 rounded-xl font-bold bg-emerald-500 text-white transition">
-            Concluir Dia
-          </button>
+        <div class="p-4 border-t border-slate-800 bg-slate-900 nav-safe-pad">
+          <button id="modal-complete-btn" class="w-full py-3.5 px-4 rounded-xl font-bold bg-emerald-500 text-white transition">Concluir dia</button>
         </div>
-
       </div>
     </div>
 
-    <!-- ========================================== -->
-    <!-- MODAL DESAFIO CRONÔMETRO 3X -->
-    <!-- ========================================== -->
+    <!-- ================= MODAL: DESAFIO 3X ================= -->
     <div id="challenge-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-pop">
       <div class="w-full max-w-sm bg-slate-900 border border-slate-700 rounded-3xl p-6 text-center shadow-2xl relative">
-        <button onclick="closeChallengeModal()" class="absolute right-4 top-4 w-7 h-7 rounded-full bg-slate-800 text-slate-400 flex items-center justify-center text-xs font-bold hover:text-white">
-          ✕
-        </button>
-
+        <button onclick="closeChallengeModal()" aria-label="Fechar" class="absolute right-4 top-4 w-7 h-7 rounded-full bg-slate-800 text-slate-400 flex items-center justify-center text-xs font-bold hover:text-white">✕</button>
         <span class="text-3xl mb-2 inline-block">⚡</span>
-        <h3 id="challenge-title" class="font-black text-slate-100 text-base mb-2">Desafio 3x</h3>
-        <p class="text-xs text-slate-400 mb-4">Repita o trava-língua 3 vezes sem errar no menor tempo possível!</p>
-
-        <div class="p-4 bg-slate-950 border border-slate-800 rounded-2xl mb-4 text-xs font-medium text-slate-200" id="challenge-text">
-          "..."
-        </div>
-
-        <div id="challenge-timer" class="text-4xl font-black text-indigo-400 tracking-wider mb-6">
-          0.0s
-        </div>
-
-        <button id="challenge-action-btn" class="w-full py-3.5 rounded-xl font-black bg-indigo-600 text-white shadow-lg shadow-indigo-600/30 transition transform active:scale-95">
-          Começar a Falar!
-        </button>
+        <h3 id="challenge-title" class="font-black text-slate-100 text-base mb-2 px-6">Desafio 3x</h3>
+        <p class="text-xs text-slate-400 mb-4">Toque em começar, fale o trava-língua <b>3 vezes seguidas sem errar</b> e toque em parar.</p>
+        <div id="challenge-text" class="p-4 bg-slate-950 border border-slate-800 rounded-2xl mb-4 text-sm font-medium text-slate-200 selectable"></div>
+        <p id="challenge-best" class="text-xs text-amber-300 font-bold mb-1"></p>
+        <div id="challenge-timer" class="text-4xl font-black text-indigo-400 tracking-wider mb-1">0.0s</div>
+        <p id="challenge-result" class="text-sm font-bold text-emerald-400 min-h-[1.5rem] mb-4"></p>
+        <button id="challenge-action-btn" onclick="runTLChallengeTimer()" class="w-full py-3.5 rounded-xl font-black bg-indigo-600 text-white shadow-lg transition active:scale-95">Começar a falar!</button>
       </div>
     </div>
 
-    <!-- ========================================== -->
-    <!-- MODAL DE INSTALAÇÃO PWA (GUIA INTELIGENTE) -->
-    <!-- ========================================== -->
-    <div id="install-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 animate-pop">
-      <div class="w-full max-w-md bg-slate-900 border-t sm:border border-slate-700 rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl">
-        
-        <div class="flex items-center justify-between mb-4">
-          <div class="flex items-center gap-2">
-            <span class="text-2xl">📲</span>
-            <h3 class="font-black text-slate-100 text-base">Instalar na Tela de Início</h3>
-          </div>
-          <button onclick="closeInstallModal()" class="w-7 h-7 rounded-full bg-slate-800 text-slate-400 flex items-center justify-center text-xs font-bold">
-            ✕
-          </button>
-        </div>
-
-        <!-- Guia para iPhone (iOS Safari) -->
-        <div id="ios-install-guide" class="space-y-3">
-          <p class="text-xs text-slate-300 font-medium leading-relaxed">
-            No iPhone, o app é instalado através do navegador Safari em apenas 2 passos rápidos:
-          </p>
-
-          <div class="flex items-center gap-3 p-3 bg-slate-800/80 rounded-2xl border border-slate-700/60 text-xs">
-            <span class="text-xl">1️⃣</span>
-            <div class="text-slate-200">
-              Toque no botão de <span class="font-bold text-indigo-300">Compartilhar</span> (o quadrado com uma seta para cima no rodapé do Safari).
-            </div>
-          </div>
-
-          <div class="flex items-center gap-3 p-3 bg-slate-800/80 rounded-2xl border border-slate-700/60 text-xs">
-            <span class="text-xl">2️⃣</span>
-            <div class="text-slate-200">
-              Role a lista para baixo e toque em <span class="font-bold text-indigo-300">"Adicionar à Tela de Início"</span>.
-            </div>
-          </div>
-
-          <p class="text-[11px] text-slate-400 text-center pt-2">
-            Pronto! Ele aparecerá com ícone próprio como se fosse baixado da App Store.
-          </p>
-        </div>
-
-        <!-- Guia para Android -->
-        <div id="android-install-guide" class="space-y-4">
-          <p class="text-xs text-slate-300 font-medium">
-            Instale o app diretamente no seu Android com 1 toque:
-          </p>
-
-          <button onclick="installPWA()" class="w-full py-3.5 rounded-2xl font-black bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-indigo-600/30 transition transform active:scale-95 flex items-center justify-center gap-2">
-            <span>🚀</span>
-            <span>Instalar Aplicativo Agora</span>
-          </button>
-
-          <p class="text-[11px] text-slate-400 text-center">
-            Se o botão não responder, toque nos 3 pontinhos do Chrome (canto superior) e selecione <b>"Instalar aplicativo"</b>.
-          </p>
-        </div>
-
-      </div>
-    </div>
-
-    <!-- ========================================== -->
-    <!-- MODAL DE CONFIRMAÇÃO PARA REGRAVAR (AVISO) -->
-    <!-- ========================================== -->
-    <div id="rerecord-confirm-modal" class="hidden fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 animate-pop">
+    <!-- ================= MODAL: CONFIRMAR REGRAVAR ================= -->
+    <div id="rerecord-confirm-modal" class="hidden fixed inset-0 z-[60] bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 animate-pop">
       <div class="w-full max-w-xs bg-slate-900 border border-slate-700/80 rounded-3xl p-5 text-center shadow-2xl">
-        <div class="w-12 h-12 mx-auto mb-3 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center text-2xl border border-amber-500/30">
-          ⚠️
+        <div class="w-12 h-12 mx-auto mb-3 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center text-2xl border border-amber-500/30">⚠️</div>
+        <h3 class="font-black text-slate-100 text-base mb-1.5">Regravar áudio?</h3>
+        <p id="rerecord-modal-desc" class="text-sm text-slate-300 mb-5 leading-relaxed"></p>
+        <div class="grid grid-cols-2 gap-2">
+          <button onclick="Gravacoes.cancelReset()" class="py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-bold transition">Cancelar</button>
+          <button onclick="Gravacoes.confirmReset()" class="py-2.5 px-3 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-sm font-bold transition shadow-lg shadow-rose-600/30">Sim, apagar</button>
         </div>
-        <h3 id="rerecord-modal-title" class="font-black text-slate-100 text-base mb-1.5">Regravar Áudio?</h3>
-        <p id="rerecord-modal-desc" class="text-xs text-slate-300 mb-5 leading-relaxed">
-          Ao regravar, a sua gravação anterior será <b>apagada permanentemente</b>. Deseja continuar?
+      </div>
+    </div>
+
+    <!-- ================= MODAL: CERTIFICADO ================= -->
+    <div id="certificate-modal" class="hidden fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-end sm:items-center justify-center sm:p-4 animate-pop">
+      <div class="w-full max-w-md bg-slate-900 border-t sm:border border-slate-700 rounded-t-3xl sm:rounded-3xl p-5 shadow-2xl max-h-[94vh] overflow-y-auto nav-safe-pad">
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="font-black text-slate-100 text-base">🎓 Seu certificado</h3>
+          <button onclick="closeCertificateModal()" aria-label="Fechar" class="w-7 h-7 rounded-full bg-slate-800 text-slate-400 flex items-center justify-center text-xs font-bold">✕</button>
+        </div>
+        <label class="block text-xs font-bold text-slate-400 mb-1" for="cert-name">Seu nome no certificado</label>
+        <input id="cert-name" maxlength="30" onchange="updateCertificatePreview()" placeholder="Digite seu nome"
+          class="w-full bg-slate-800 border border-slate-700 rounded-xl py-2.5 px-3 text-sm text-slate-100 mb-3 focus:outline-none focus:border-indigo-500">
+        <img id="cert-preview" alt="Prévia do certificado" class="w-full rounded-2xl border border-slate-700 mb-4">
+        <div class="grid grid-cols-2 gap-2">
+          <button onclick="downloadCertificate()" class="py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-bold transition">⬇️ Baixar</button>
+          <button onclick="shareCertificate()" class="py-3 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 text-sm font-black transition active:scale-95">📤 Compartilhar</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= MODAL: CONFIGURAÇÕES ================= -->
+    <div id="settings-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-end sm:items-center justify-center sm:p-4 animate-pop">
+      <div class="w-full max-w-md bg-slate-900 border-t sm:border border-slate-700 rounded-t-3xl sm:rounded-3xl p-5 shadow-2xl max-h-[92vh] overflow-y-auto nav-safe-pad">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="font-black text-slate-100 text-base">⚙️ Configurações</h3>
+          <button onclick="closeSettingsModal()" aria-label="Fechar" class="w-7 h-7 rounded-full bg-slate-800 text-slate-400 flex items-center justify-center text-xs font-bold">✕</button>
+        </div>
+
+        <label class="block text-xs font-bold text-slate-400 mb-1" for="settings-name">Seu nome</label>
+        <input id="settings-name" maxlength="30" placeholder="Como quer ser chamado(a)?"
+          class="w-full bg-slate-800 border border-slate-700 rounded-xl py-2.5 px-3 text-sm text-slate-100 mb-4 focus:outline-none focus:border-indigo-500">
+
+        <div class="p-3 rounded-2xl bg-slate-800/70 border border-slate-700 mb-4 text-xs text-slate-300">
+          <span class="font-bold text-slate-200">Liberação dos treinos:</span> <span id="settings-mode"></span>
+        </div>
+
+        <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Backup do progresso</p>
+        <p class="text-xs text-slate-400 mb-2 leading-relaxed">Seu progresso fica salvo apenas neste aparelho. Faça um backup para não perder ao trocar de celular ou limpar o navegador (as gravações de áudio não entram no backup).</p>
+        <div class="grid grid-cols-2 gap-2 mb-5">
+          <button onclick="exportBackup()" class="py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition">💾 Fazer backup</button>
+          <label class="py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition text-center cursor-pointer">
+            📂 Restaurar
+            <input type="file" accept="application/json,.json" class="hidden" onchange="importBackup(event)">
+          </label>
+        </div>
+
+        <button onclick="resetProgress()" class="w-full py-2.5 rounded-xl bg-rose-950/60 border border-rose-800/60 text-rose-300 text-xs font-bold hover:bg-rose-900/60 transition mb-5">🗑️ Apagar todo o progresso</button>
+
+        <p id="settings-legal" class="text-[11px] text-slate-500 leading-relaxed"></p>
+      </div>
+    </div>
+
+    <!-- ================= MODAL: INSTALAR APP ================= -->
+    <div id="install-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-end sm:items-center justify-center sm:p-4 animate-pop">
+      <div class="w-full max-w-md bg-slate-900 border-t sm:border border-slate-700 rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl nav-safe-pad">
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="font-black text-slate-100 text-base">📲 Instale na tela de início</h3>
+          <button onclick="closeInstallModal()" aria-label="Fechar" class="w-7 h-7 rounded-full bg-slate-800 text-slate-400 flex items-center justify-center text-xs font-bold">✕</button>
+        </div>
+        <p class="text-xs text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-xl p-2.5 mb-4 leading-relaxed">
+          <b>Importante:</b> instalando o app, ele abre em tela cheia e seu progresso fica protegido. Sem instalar, o celular pode apagar seus dados após alguns dias sem uso.
         </p>
 
-        <div class="grid grid-cols-2 gap-2">
-          <button onclick="closeRerecordModal()" class="py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition">
-            Cancelar
-          </button>
-          <button onclick="confirmAndRerecord()" class="py-2.5 px-3 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition shadow-lg shadow-rose-600/30">
-            Sim, Apagar
-          </button>
+        <div id="ios-install-guide" class="space-y-3">
+          <div class="flex items-center gap-3 p-3 bg-slate-800/80 rounded-2xl border border-slate-700/60 text-sm">
+            <span class="text-xl">1️⃣</span>
+            <div class="text-slate-200">No <b>Safari</b>, toque em <span class="font-bold text-indigo-300">Compartilhar</span> (quadrado com seta para cima).</div>
+          </div>
+          <div class="flex items-center gap-3 p-3 bg-slate-800/80 rounded-2xl border border-slate-700/60 text-sm">
+            <span class="text-xl">2️⃣</span>
+            <div class="text-slate-200">Toque em <span class="font-bold text-indigo-300">"Adicionar à Tela de Início"</span>.</div>
+          </div>
+          <div class="flex items-center gap-3 p-3 bg-slate-800/80 rounded-2xl border border-slate-700/60 text-sm">
+            <span class="text-xl">3️⃣</span>
+            <div class="text-slate-200">Abra o app pelo novo ícone 🎙️ na tela de início.</div>
+          </div>
         </div>
+
+        <div id="android-install-guide" class="space-y-4">
+          <button onclick="installPWA()" class="w-full py-3.5 rounded-2xl font-black bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-indigo-600/30 transition active:scale-95">🚀 Instalar aplicativo agora</button>
+          <p class="text-xs text-slate-400 text-center">Se o botão não funcionar, toque nos 3 pontinhos do Chrome e escolha <b>"Instalar aplicativo"</b>.</p>
+        </div>
+
+        <button onclick="closeInstallModal()" class="w-full mt-4 py-2 text-xs text-slate-400 font-semibold">Agora não</button>
       </div>
     </div>
 
+    <!-- ================= TOAST ================= -->
+    <div id="toast" role="status" aria-live="polite"
+      class="fixed left-1/2 -translate-x-1/2 bottom-24 z-[80] max-w-[90%] bg-slate-100 text-slate-900 text-sm font-semibold px-4 py-2.5 rounded-2xl shadow-2xl transition-all duration-300 opacity-0 translate-y-4 pointer-events-none text-center"></div>
   </div>
 
-  <!-- Scripts -->
-  <script src="./js/conteudo.js?v=4"></script>
-  <script src="./js/app.js?v=4"></script>
+  <!-- ================= TELA: CÓDIGO DE ACESSO ================= -->
+  <div id="gate" class="hidden fixed inset-0 z-[90] bg-slate-950 flex items-center justify-center p-6">
+    <form id="gate-card" onsubmit="submitAccessCode(event)" class="w-full max-w-sm text-center">
+      <img src="./assets/icons/icon-192.png" alt="" class="w-20 h-20 rounded-3xl mx-auto mb-4 shadow-lg shadow-indigo-500/30">
+      <h2 class="text-xl font-black text-slate-100 mb-1">Voz & Dicção Pro</h2>
+      <p class="text-sm text-slate-400 mb-6">Digite o código de acesso que você recebeu no e-mail da compra.</p>
+      <input id="gate-code" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="SEU CÓDIGO"
+        class="w-full bg-slate-800 border border-slate-700 rounded-2xl py-3.5 px-4 text-center text-lg font-black tracking-widest text-slate-100 uppercase focus:outline-none focus:border-indigo-500 mb-2">
+      <p id="gate-error" class="hidden text-sm text-rose-400 font-semibold mb-2">Código inválido. Confira e tente novamente.</p>
+      <button type="submit" class="w-full py-3.5 rounded-2xl font-black bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-indigo-600/30 transition active:scale-95 mt-2">Entrar</button>
+      <a id="gate-support" href="#" target="_blank" rel="noopener" class="hidden block mt-4 text-xs text-indigo-300 underline">Não recebeu seu código? Fale com o suporte</a>
+    </form>
+  </div>
+
+  <!-- ================= TELA: BOAS-VINDAS ================= -->
+  <div id="onboarding" class="hidden fixed inset-0 z-[85] bg-slate-950/95 backdrop-blur-md flex items-center justify-center p-5 overflow-y-auto">
+    <form onsubmit="finishOnboarding(event)" class="w-full max-w-sm bg-slate-900 border border-slate-700 rounded-3xl p-6 shadow-2xl animate-pop my-auto">
+      <div class="text-center mb-5">
+        <div class="text-5xl mb-2">🎙️</div>
+        <h2 class="text-xl font-black text-slate-100">Bem-vindo(a)!</h2>
+        <p class="text-sm text-slate-400">Sua fala mais clara e confiante em 21 dias.</p>
+      </div>
+
+      <ul class="space-y-2.5 mb-5 text-sm text-slate-200">
+        <li class="flex gap-3 items-start"><span class="text-lg">🏆</span><span><b>1 treino por dia</b> de 5 minutos. Um novo dia é liberado a cada 24h.</span></li>
+        <li class="flex gap-3 items-start"><span class="text-lg">🎙️</span><span><b>Grave sua voz</b> no Dia 1 e no Dia 21 e compare a sua evolução.</span></li>
+        <li class="flex gap-3 items-start"><span class="text-lg">🔥</span><span>Treine todos os dias para manter sua <b>sequência</b>.</span></li>
+        <li class="flex gap-3 items-start"><span class="text-lg">🎓</span><span>No final, ganhe seu <b>certificado</b> de conclusão.</span></li>
+      </ul>
+
+      <label class="block text-xs font-bold text-slate-400 mb-1" for="onboarding-name">Como quer ser chamado(a)?</label>
+      <input id="onboarding-name" maxlength="30" placeholder="Seu nome"
+        class="w-full bg-slate-800 border border-slate-700 rounded-xl py-3 px-3 text-sm text-slate-100 mb-4 focus:outline-none focus:border-indigo-500">
+
+      <button type="submit" class="w-full py-3.5 rounded-2xl font-black bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-lg shadow-emerald-500/25 transition active:scale-95">Começar o desafio 🚀</button>
+      <p id="onboarding-legal" class="text-[11px] text-slate-500 leading-relaxed mt-4 text-center"></p>
+    </form>
+  </div>
+
+  <script src="./js/conteudo.js?v=5"></script>
+  <script src="./js/db.js?v=5"></script>
+  <script src="./js/recorder.js?v=5"></script>
+  <script src="./js/app.js?v=5"></script>
 </body>
 </html>

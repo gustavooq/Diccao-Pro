@@ -1,629 +1,390 @@
 /**
- * LOGICA PRINCIPAL DO APLICATIVO (app.js)
- * Gerencia estado local, abas, timer, som, PWA e eventos
+ * LÓGICA PRINCIPAL DO APLICATIVO (app.js)
+ * Estado, progresso, abas, treinos, trava-línguas, kids, certificado e PWA.
+ * Depende de: conteudo.js, db.js, recorder.js
  */
 
-// Chave do localStorage
 const STORAGE_KEY = 'diccao_app_state_v1';
+const CFG = APP_CONTEUDO.config;
+const TOTAL_DIAS = CFG.totalDiasDesafio;
 
-// Estado da Aplicação
-let appState = {
+const DEFAULT_STATE = {
   completedDays: [],
-  streak: 0,
-  lastCompletedDate: null,
+  completionDates: {}, // { [dia]: 'AAAA-MM-DD' } (data local em que concluiu)
   favoriteTravalinguas: [],
+  tlRecords: {}, // { [id]: melhor tempo em segundos no Desafio 3x }
   kidsStars: 0,
-  completedKids: []
+  completedKids: [],
+  userName: '',
+  onboarded: false,
+  accessGranted: false
 };
 
-// Variável para o prompt de instalação PWA
+let appState = JSON.parse(JSON.stringify(DEFAULT_STATE));
 let deferredPrompt = null;
 
 // ==========================================
-// EFEITOS SONOROS VIA WEB AUDIO API (Nativo, sem arquivos externos)
+// DATAS (sempre no horário LOCAL do aparelho)
+// ==========================================
+function dateKey(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function todayKey() {
+  return dateKey(new Date());
+}
+
+function formatDateBR(key) {
+  if (!key) return '';
+  const [y, m, d] = key.split('-');
+  return `${d}/${m}/${y}`;
+}
+
+// ==========================================
+// EFEITOS SONOROS (Web Audio API, sem arquivos)
 // ==========================================
 const SoundFX = {
   ctx: null,
   init() {
     if (!this.ctx) {
-      const AudioContext = window.AudioContext || window.webkitAudioContext;
-      if (AudioContext) this.ctx = new AudioContext();
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (Ctx) this.ctx = new Ctx();
     }
   },
-  playCelebration() {
+  tone(freq, type, duration, volume, delay = 0, endFreq = null) {
     this.init();
     if (!this.ctx) return;
-    const notes = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6
-    notes.forEach((freq, index) => {
-      setTimeout(() => {
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
-        gain.gain.setValueAtTime(0.15, this.ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.4);
-        osc.connect(gain);
-        gain.connect(this.ctx.destination);
-        osc.start();
-        osc.stop(this.ctx.currentTime + 0.4);
-      }, index * 90);
-    });
+    setTimeout(() => {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+      if (endFreq) osc.frequency.exponentialRampToValueAtTime(endFreq, this.ctx.currentTime + duration);
+      gain.gain.setValueAtTime(volume, this.ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + duration);
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.start();
+      osc.stop(this.ctx.currentTime + duration);
+    }, delay);
+  },
+  playCelebration() {
+    [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => this.tone(f, 'triangle', 0.4, 0.15, i * 90));
   },
   playStar() {
-    this.init();
-    if (!this.ctx) return;
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(880, this.ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(1760, this.ctx.currentTime + 0.25);
-    gain.gain.setValueAtTime(0.15, this.ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.3);
-    osc.connect(gain);
-    gain.connect(this.ctx.destination);
-    osc.start();
-    osc.stop(this.ctx.currentTime + 0.3);
+    this.tone(880, 'sine', 0.3, 0.15, 0, 1760);
   },
   playTick() {
-    this.init();
-    if (!this.ctx) return;
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-    osc.type = 'square';
-    osc.frequency.setValueAtTime(600, this.ctx.currentTime);
-    gain.gain.setValueAtTime(0.05, this.ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.05);
-    osc.connect(gain);
-    gain.connect(this.ctx.destination);
-    osc.start();
-    osc.stop(this.ctx.currentTime + 0.05);
+    this.tone(600, 'square', 0.05, 0.05);
   }
 };
 
 // ==========================================
-// CARREGAR E SALVAR ESTADO
+// ESTADO: CARREGAR, MIGRAR E SALVAR
 // ==========================================
 function loadState() {
   try {
-    const saved = localStorage.getItem(STORAGE_KEY);
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
     if (saved) {
-      appState = Object.assign(appState, JSON.parse(saved));
+      appState = Object.assign(JSON.parse(JSON.stringify(DEFAULT_STATE)), saved);
+      // Migração da versão antiga (sem datas por dia)
+      const fallback = saved.lastCompletedDate || todayKey();
+      appState.completedDays.forEach((d) => {
+        if (!appState.completionDates[d]) appState.completionDates[d] = fallback;
+      });
+      delete appState.streak;
+      delete appState.lastCompletedDate;
     }
   } catch (e) {
-    console.warn("Erro ao carregar dados locais", e);
+    console.warn('Erro ao carregar dados locais', e);
   }
-  checkStreak();
-  updateUI();
 }
 
 function saveState() {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(appState));
   } catch (e) {
-    console.warn("Erro ao salvar dados locais", e);
+    console.warn('Erro ao salvar dados locais', e);
   }
   updateUI();
 }
 
-// Verifica e atualiza a sequência diária (Streak 🔥)
-function checkStreak() {
-  if (!appState.lastCompletedDate) return;
-  const today = new Date().toISOString().split('T')[0];
-  const last = appState.lastCompletedDate;
-  
-  const diffDays = Math.round((new Date(today) - new Date(last)) / (1000 * 60 * 60 * 24));
-  if (diffDays > 1) {
-    // Quebrou a sequência
-    appState.streak = 0;
+// Sequência 🔥 = dias seguidos (até hoje ou ontem) com treino concluído
+function computeStreak() {
+  const dates = new Set(Object.values(appState.completionDates));
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  if (!dates.has(dateKey(d))) {
+    d.setDate(d.getDate() - 1);
+    if (!dates.has(dateKey(d))) return 0;
   }
+  let streak = 0;
+  while (dates.has(dateKey(d))) {
+    streak++;
+    d.setDate(d.getDate() - 1);
+  }
+  return streak;
 }
 
 // ==========================================
-// RENDERIZAÇÃO DAS TELAS E ABAS
+// AVISOS RÁPIDOS (TOAST)
 // ==========================================
-let currentTab = 'desafio';
+let toastTimer = null;
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.remove('opacity-0', 'translate-y-4', 'pointer-events-none');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.add('opacity-0', 'translate-y-4', 'pointer-events-none'), 3000);
+}
 
+// ==========================================
+// ABAS
+// ==========================================
 function switchTab(tabName) {
-  currentTab = tabName;
-  document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
-  document.querySelectorAll('.nav-btn').forEach(btn => {
-    btn.classList.remove('text-indigo-400', 'border-indigo-400', 'font-bold');
+  document.querySelectorAll('.tab-content').forEach((el) => el.classList.add('hidden'));
+  document.querySelectorAll('.nav-btn').forEach((btn) => {
+    btn.classList.remove('text-indigo-400', 'font-bold');
     btn.classList.add('text-slate-400');
   });
-
-  const activeContent = document.getElementById(`tab-${tabName}`);
-  const activeBtn = document.getElementById(`btn-${tabName}`);
-  if (activeContent) activeContent.classList.remove('hidden');
-  if (activeBtn) {
-    activeBtn.classList.add('text-indigo-400', 'font-bold');
-    activeBtn.classList.remove('text-slate-400');
+  const content = document.getElementById(`tab-${tabName}`);
+  const btn = document.getElementById(`btn-${tabName}`);
+  if (content) content.classList.remove('hidden');
+  if (btn) {
+    btn.classList.add('text-indigo-400', 'font-bold');
+    btn.classList.remove('text-slate-400');
   }
-
-  // Rolar suave para o topo
+  Gravacoes.stopPlayback();
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-// Atualizar interface geral (Progresso, Streak, Estrelas)
+// ==========================================
+// INTERFACE GERAL
+// ==========================================
 function updateUI() {
-  // Progresso do Desafio
-  const totalDias = APP_CONTEUDO.config.totalDiasDesafio;
-  const concluidos = appState.completedDays.length;
-  const pct = Math.round((concluidos / totalDias) * 100);
+  const done = appState.completedDays.length;
+  const pct = Math.round((done / TOTAL_DIAS) * 100);
 
-  const progressBar = document.getElementById('progress-bar');
-  const progressText = document.getElementById('progress-text');
-  const streakCount = document.getElementById('streak-count');
-  const kidsStarsCount = document.getElementById('kids-stars-count');
+  const setText = (id, txt) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = txt;
+  };
 
-  if (progressBar) progressBar.style.width = `${pct}%`;
-  if (progressText) progressText.innerText = `${concluidos}/${totalDias} Dias (${pct}%)`;
-  if (streakCount) streakCount.innerText = `${appState.streak}d`;
-  if (kidsStarsCount) kidsStarsCount.innerText = `${appState.kidsStars} ⭐`;
+  const bar = document.getElementById('progress-bar');
+  if (bar) bar.style.width = `${pct}%`;
+  setText('progress-text', `${done}/${TOTAL_DIAS} dias (${pct}%)`);
+  setText('streak-count', `${computeStreak()}d`);
+  setText('kids-stars-count', `${appState.kidsStars} ⭐`);
+  setText('header-greeting', appState.userName ? `Olá, ${appState.userName} 👋` : 'Desafio diário');
 
   renderDesafioGrid();
+  renderEvolucao();
+  renderCertificadoCard();
 }
 
-// Renderiza a grade dos 21 dias do desafio
+// ==========================================
+// DESAFIO 21 DIAS: LIBERAÇÃO DOS DIAS
+// ==========================================
+function isDone(n) {
+  return appState.completedDays.includes(n);
+}
+
+/**
+ * 'done'            -> concluído
+ * 'open'            -> liberado para treinar
+ * 'locked-seq'      -> precisa concluir o dia anterior
+ * 'locked-tomorrow' -> anterior concluído hoje, libera amanhã (modo diário)
+ */
+function getDayStatus(n) {
+  if (isDone(n)) return 'done';
+  const mode = CFG.modoLiberacao || 'diario';
+  if (mode === 'livre' || n === 1) return 'open';
+  if (!isDone(n - 1)) return 'locked-seq';
+  if (mode === 'diario' && appState.completionDates[n - 1] === todayKey()) return 'locked-tomorrow';
+  return 'open';
+}
+
+function canUncheck(n) {
+  return isDone(n) && !isDone(n + 1);
+}
+
 function renderDesafioGrid() {
   const container = document.getElementById('desafio-grid');
   if (!container) return;
-
   container.innerHTML = '';
 
-  APP_CONTEUDO.desafio21.forEach((diaData) => {
-    const isCompleted = appState.completedDays.includes(diaData.dia);
-    // O dia atual é o primeiro não concluído
-    const isCurrent = !isCompleted && (diaData.dia === 1 || appState.completedDays.includes(diaData.dia - 1));
+  APP_CONTEUDO.desafio21.forEach((dia) => {
+    const st = getDayStatus(dia.dia);
+    const styles = {
+      done: {
+        card: 'bg-emerald-950/40 border-emerald-500/40 hover:border-emerald-400',
+        badge: 'bg-emerald-500/20 text-emerald-400',
+        icon: 'bg-emerald-500 text-white',
+        symbol: '✓'
+      },
+      open: {
+        card: 'bg-indigo-950/60 border-indigo-500 ring-2 ring-indigo-500/30 pulse-glow',
+        badge: 'bg-indigo-500/30 text-indigo-300 font-bold',
+        icon: 'bg-indigo-500 text-white',
+        symbol: '▶'
+      },
+      'locked-tomorrow': {
+        card: 'bg-slate-800/60 border-amber-500/40',
+        badge: 'bg-amber-500/20 text-amber-300',
+        icon: 'bg-amber-500/30 text-amber-200',
+        symbol: '⏳'
+      },
+      'locked-seq': {
+        card: 'bg-slate-800/40 border-slate-700/60 opacity-70',
+        badge: 'bg-slate-700 text-slate-400',
+        icon: 'bg-slate-700 text-slate-400',
+        symbol: '🔒'
+      }
+    }[st];
 
-    const card = document.createElement('div');
-    card.className = `p-4 rounded-2xl cursor-pointer transition-all border ${
-      isCompleted 
-        ? 'bg-emerald-950/40 border-emerald-500/40 hover:border-emerald-400' 
-        : isCurrent 
-          ? 'bg-indigo-950/60 border-indigo-500 ring-2 ring-indigo-500/30 pulse-glow' 
-          : 'bg-slate-800/60 border-slate-700/60 hover:border-slate-500 opacity-90'
-    }`;
-
-    card.onclick = () => openDayModal(diaData.dia);
-
+    const card = document.createElement('button');
+    card.type = 'button';
+    card.className = `w-full text-left p-4 rounded-2xl transition-all border ${styles.card}`;
+    card.onclick = () => onDayClick(dia.dia);
     card.innerHTML = `
       <div class="flex items-center justify-between mb-2">
-        <span class="text-xs font-semibold px-2 py-0.5 rounded-full ${
-          isCompleted 
-            ? 'bg-emerald-500/20 text-emerald-400' 
-            : isCurrent 
-              ? 'bg-indigo-500/30 text-indigo-300 font-bold' 
-              : 'bg-slate-700 text-slate-400'
-        }">
-          Dia ${diaData.dia.toString().padStart(2, '0')} • Sem ${diaData.semana}
+        <span class="text-xs font-semibold px-2 py-0.5 rounded-full ${styles.badge}">
+          Dia ${String(dia.dia).padStart(2, '0')} • Semana ${dia.semana}
         </span>
-        <div class="w-7 h-7 rounded-full flex items-center justify-center ${
-          isCompleted ? 'bg-emerald-500 text-white' : isCurrent ? 'bg-indigo-500 text-white' : 'bg-slate-700 text-slate-400'
-        }">
-          ${isCompleted ? '✓' : isCurrent ? '▶' : '🔒'}
-        </div>
+        <div class="w-7 h-7 rounded-full flex items-center justify-center text-sm ${styles.icon}">${styles.symbol}</div>
       </div>
-      <h3 class="font-bold text-slate-100 text-sm mb-1 leading-snug">${diaData.titulo}</h3>
-      <div class="flex items-center text-xs text-slate-400 gap-2">
-        <span>🎯 ${diaData.foco}</span>
-        <span>•</span>
-        <span>⏱️ ${diaData.duracao}</span>
-      </div>
-    `;
-
+      <h3 class="font-bold text-slate-100 text-sm mb-1 leading-snug">${dia.titulo}</h3>
+      <div class="flex flex-wrap items-center text-xs text-slate-400 gap-x-2">
+        <span>🎯 ${dia.foco}</span><span>•</span><span>⏱️ ${dia.duracao}</span>
+        ${st === 'locked-tomorrow' ? '<span class="text-amber-300 font-semibold">• Libera amanhã</span>' : ''}
+      </div>`;
     container.appendChild(card);
   });
 }
 
-// ==========================================
-// GRAVADOR DE VOZ PARA AUTOAVALIAÇÃO
-// ==========================================
-let mediaRecorder = null;
-let audioStream = null;
-let recordedAudioChunks = [];
-let recordedAudioBlob = null;
-let recordedAudioUrl = null;
-let recordTimerInterval = null;
-let recordSeconds = 0;
-let recordState = 'idle'; // 'idle' | 'recording' | 'recorded'
-let isPlayingRecordedAudio = false;
-
-function resetRecorderUI() {
-  stopActiveRecording();
-  stopActivePlayback();
-
-  if (recordedAudioUrl) {
-    URL.revokeObjectURL(recordedAudioUrl);
-    recordedAudioUrl = null;
+function onDayClick(n) {
+  const st = getDayStatus(n);
+  if (st === 'locked-seq') {
+    showToast(`🔒 Conclua o Dia ${n - 1} primeiro.`);
+    return;
   }
-  recordedAudioBlob = null;
-  recordedAudioChunks = [];
-  recordSeconds = 0;
-  recordState = 'idle';
-
-  const recordBtn = document.getElementById('modal-record-btn');
-  const recordIcon = document.getElementById('record-btn-icon');
-  const recordText = document.getElementById('record-btn-text');
-  const statusLabel = document.getElementById('record-status-label');
-  const rerecordBtn = document.getElementById('modal-rerecord-btn');
-
-  if (recordBtn) {
-    recordBtn.className = "flex-1 py-2.5 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold flex items-center justify-center gap-2 transition active:scale-95 shadow-md";
+  if (st === 'locked-tomorrow') {
+    showToast('⏳ Volte amanhã! Um novo treino é liberado por dia.');
+    return;
   }
-  if (recordIcon) recordIcon.innerText = "🎙️";
-  if (recordText) recordText.innerText = "Gravar Áudio";
-  if (statusLabel) {
-    statusLabel.innerText = "Grave sua fala";
-    statusLabel.className = "text-[10px] font-semibold text-slate-400";
-  }
-  if (rerecordBtn) {
-    rerecordBtn.className = "w-10 h-10 rounded-xl bg-slate-800 text-slate-500 flex items-center justify-center text-xl font-bold transition border border-slate-700/60 opacity-50 cursor-not-allowed shrink-0";
-  }
-}
-
-function handleRecordAction() {
-  if (recordState === 'idle') {
-    startVoiceRecording();
-  } else if (recordState === 'recording') {
-    stopVoiceRecording();
-  } else if (recordState === 'recorded') {
-    togglePlayRecordedAudio();
-  }
-}
-
-async function startVoiceRecording() {
-  try {
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      alert("Seu navegador não suporta gravação de áudio direta.");
-      return;
-    }
-
-    audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    
-    // Suporte aos formatos comuns de áudio em navegadores
-    let mimeType = 'audio/webm';
-    if (window.MediaRecorder && MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
-      mimeType = 'audio/webm;codecs=opus';
-    } else if (window.MediaRecorder && MediaRecorder.isTypeSupported('audio/mp4')) {
-      mimeType = 'audio/mp4';
-    } else if (window.MediaRecorder && MediaRecorder.isTypeSupported('audio/ogg')) {
-      mimeType = 'audio/ogg';
-    }
-
-    mediaRecorder = new MediaRecorder(audioStream, { mimeType: mimeType });
-    recordedAudioChunks = [];
-
-    mediaRecorder.ondataavailable = (e) => {
-      if (e.data && e.data.size > 0) {
-        recordedAudioChunks.push(e.data);
-      }
-    };
-
-    mediaRecorder.onstop = () => {
-      recordedAudioBlob = new Blob(recordedAudioChunks, { type: mimeType });
-      if (recordedAudioUrl) URL.revokeObjectURL(recordedAudioUrl);
-      recordedAudioUrl = URL.createObjectURL(recordedAudioBlob);
-      
-      const audioEl = document.getElementById('modal-recorded-audio');
-      if (audioEl) {
-        audioEl.src = recordedAudioUrl;
-        audioEl.onended = () => {
-          isPlayingRecordedAudio = false;
-          updateRecordedPlayUI();
-        };
-      }
-
-      if (audioStream) {
-        audioStream.getTracks().forEach(track => track.stop());
-        audioStream = null;
-      }
-
-      recordState = 'recorded';
-      updateRecordedPlayUI();
-    };
-
-    mediaRecorder.start(200);
-    recordState = 'recording';
-    recordSeconds = 0;
-
-    const recordBtn = document.getElementById('modal-record-btn');
-    const recordIcon = document.getElementById('record-btn-icon');
-    const recordText = document.getElementById('record-btn-text');
-    const statusLabel = document.getElementById('record-status-label');
-    const rerecordBtn = document.getElementById('modal-rerecord-btn');
-
-    if (recordBtn) {
-      recordBtn.className = "flex-1 py-2.5 px-3 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold flex items-center justify-center gap-2 transition active:scale-95 shadow-md shadow-rose-600/30 animate-pulse";
-    }
-    if (recordIcon) recordIcon.innerText = "⏹️";
-    if (recordText) recordText.innerText = "Parar Gravação";
-    if (rerecordBtn) {
-      rerecordBtn.className = "w-10 h-10 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-300 flex items-center justify-center text-xl font-bold transition border border-slate-600 active:scale-90 shrink-0";
-    }
-
-    recordTimerInterval = setInterval(() => {
-      recordSeconds++;
-      const mins = Math.floor(recordSeconds / 60);
-      const secs = recordSeconds % 60;
-      if (statusLabel) {
-        statusLabel.innerText = `🔴 Gravando... ${mins}:${secs < 10 ? '0' : ''}${secs}`;
-        statusLabel.className = "text-[10px] font-bold text-rose-400";
-      }
-    }, 1000);
-
-  } catch (err) {
-    console.error("Erro ao acessar microfone:", err);
-    alert("Não foi possível acessar o microfone. Verifique as permissões de áudio do seu navegador.");
-  }
-}
-
-function stopVoiceRecording() {
-  if (recordTimerInterval) {
-    clearInterval(recordTimerInterval);
-    recordTimerInterval = null;
-  }
-  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-    mediaRecorder.stop();
-  }
-}
-
-function updateRecordedPlayUI() {
-  const recordBtn = document.getElementById('modal-record-btn');
-  const recordIcon = document.getElementById('record-btn-icon');
-  const recordText = document.getElementById('record-btn-text');
-  const statusLabel = document.getElementById('record-status-label');
-  const rerecordBtn = document.getElementById('modal-rerecord-btn');
-
-  if (recordBtn) {
-    recordBtn.className = isPlayingRecordedAudio 
-      ? "flex-1 py-2.5 px-3 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold flex items-center justify-center gap-2 transition active:scale-95 shadow-md"
-      : "flex-1 py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center justify-center gap-2 transition active:scale-95 shadow-md";
-  }
-  if (recordIcon) recordIcon.innerText = isPlayingRecordedAudio ? "⏸️" : "▶️";
-  if (recordText) recordText.innerText = isPlayingRecordedAudio ? "Pausar Áudio" : "Ouvir Minha Gravação";
-  
-  if (statusLabel) {
-    statusLabel.innerText = `✓ Gravado (${recordSeconds}s)`;
-    statusLabel.className = "text-[10px] font-bold text-emerald-400";
-  }
-
-  if (rerecordBtn) {
-    rerecordBtn.className = "w-10 h-10 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-200 flex items-center justify-center text-xl font-bold transition border border-slate-600 active:scale-90 shrink-0";
-  }
-}
-
-function togglePlayRecordedAudio() {
-  const audioEl = document.getElementById('modal-recorded-audio');
-  if (!audioEl || !recordedAudioUrl) return;
-
-  if (isPlayingRecordedAudio) {
-    audioEl.pause();
-    isPlayingRecordedAudio = false;
-  } else {
-    audioEl.play().catch(e => console.log('Audio playback error:', e));
-    isPlayingRecordedAudio = true;
-  }
-  updateRecordedPlayUI();
-}
-
-function stopActiveRecording() {
-  if (recordTimerInterval) {
-    clearInterval(recordTimerInterval);
-    recordTimerInterval = null;
-  }
-  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-    try { mediaRecorder.stop(); } catch(e){}
-  }
-  if (audioStream) {
-    audioStream.getTracks().forEach(track => track.stop());
-    audioStream = null;
-  }
-}
-
-function stopActivePlayback() {
-  const audioEl = document.getElementById('modal-recorded-audio');
-  if (audioEl) {
-    audioEl.pause();
-    audioEl.currentTime = 0;
-  }
-  isPlayingRecordedAudio = false;
-}
-
-// ==========================================
-// AVISO E CONFIRMAÇÃO DE REGRAVAR (↺)
-// ==========================================
-let pendingResetTarget = null; // 'workout' | 'tl:<id>'
-
-function promptResetRecording() {
-  if (recordState === 'idle') return;
-  pendingResetTarget = 'workout';
-  
-  const title = document.getElementById('rerecord-modal-title');
-  const desc = document.getElementById('rerecord-modal-desc');
-  if (title) title.innerText = "Regravar Treino Diário?";
-  if (desc) desc.innerHTML = "Ao regravar, a sua gravação anterior será <b>apagada permanentemente</b>. Deseja continuar?";
-
-  const modal = document.getElementById('rerecord-confirm-modal');
-  if (modal) modal.classList.remove('hidden');
-}
-
-function promptResetTLRecord(id) {
-  const rec = tlRecordMap[id];
-  if (!rec || rec.state === 'idle') return;
-  pendingResetTarget = 'tl:' + id;
-
-  const item = APP_CONTEUDO.travaLinguas.find(t => t.id === id);
-  const name = item ? `"${item.titulo}"` : "este trava-língua";
-
-  const title = document.getElementById('rerecord-modal-title');
-  const desc = document.getElementById('rerecord-modal-desc');
-  if (title) title.innerText = "Regravar Trava-Língua?";
-  if (desc) desc.innerHTML = `Ao regravar ${name}, o áudio anterior será <b>apagado permanentemente</b>. Deseja continuar?`;
-
-  const modal = document.getElementById('rerecord-confirm-modal');
-  if (modal) modal.classList.remove('hidden');
-}
-
-function closeRerecordModal() {
-  pendingResetTarget = null;
-  const modal = document.getElementById('rerecord-confirm-modal');
-  if (modal) modal.classList.add('hidden');
-}
-
-function confirmAndRerecord() {
-  const target = pendingResetTarget;
-  closeRerecordModal();
-
-  if (target === 'workout') {
-    resetRecorderUI();
-    startVoiceRecording();
-  } else if (target && target.startsWith('tl:')) {
-    const id = target.split(':')[1];
-    resetTLRecording(id);
-    startTLVoiceRecording(id);
-  }
+  openDayModal(n);
 }
 
 // ==========================================
 // MODAL DO TREINO DO DIA
 // ==========================================
-let activeModalDay = null;
-
-function openDayModal(dayNumber) {
-  const data = APP_CONTEUDO.desafio21.find(d => d.dia === dayNumber);
+function openDayModal(n) {
+  const data = APP_CONTEUDO.desafio21.find((d) => d.dia === n);
   if (!data) return;
-  activeModalDay = dayNumber;
 
-  const modal = document.getElementById('day-modal');
-  const isCompleted = appState.completedDays.includes(dayNumber);
+  document.getElementById('modal-day-badge').textContent = `DIA ${data.dia} • SEMANA ${data.semana}`;
+  document.getElementById('modal-title').textContent = data.titulo;
+  document.getElementById('modal-focus').textContent = `Foco: ${data.foco} (${data.duracao})`;
+  document.getElementById('modal-tip').textContent = data.dica;
+  document.getElementById('modal-steps').innerHTML = data.passos
+    .map((p) => `<li class="bg-slate-800/80 p-3 rounded-xl border border-slate-700/50 text-slate-200 text-sm leading-relaxed">${p}</li>`)
+    .join('');
+  document.getElementById('modal-training-phrase').textContent = `"${data.fraseTreino}"`;
 
-  document.getElementById('modal-day-badge').innerText = `DIA ${data.dia} • SEMANA ${data.semana}`;
-  document.getElementById('modal-title').innerText = data.titulo;
-  document.getElementById('modal-focus').innerText = `Foco: ${data.foco} (${data.duracao})`;
-  document.getElementById('modal-tip').innerText = data.dica;
-  
-  // Passos
-  const stepsContainer = document.getElementById('modal-steps');
-  stepsContainer.innerHTML = data.passos.map(step => `
-    <li class="bg-slate-800/80 p-3 rounded-xl border border-slate-700/50 text-slate-200 text-sm leading-relaxed">${step}</li>
-  `).join('');
+  // Gravador do dia (salvo como "dia-N")
+  const slot = document.getElementById('modal-rec-slot');
+  slot.dataset.recSlot = `dia-${n}`;
+  slot.dataset.recLabel = `Dia ${n}`;
+  Gravacoes.refresh(`dia-${n}`);
 
-  // Frase de Treino
-  document.getElementById('modal-training-phrase').innerText = `"${data.fraseTreino}"`;
-
-  // Resetar gravador de voz para o treino do dia
-  resetRecorderUI();
-
-  // Botão de Conclusão
-  const completeBtn = document.getElementById('modal-complete-btn');
-  if (isCompleted) {
-    completeBtn.className = "w-full py-3.5 px-4 rounded-xl font-bold bg-slate-700 text-slate-300 hover:bg-slate-600 transition";
-    completeBtn.innerText = "✓ Dia Concluído (Toque para desmarcar)";
-    completeBtn.onclick = () => toggleCompleteDay(dayNumber);
+  // Botão de conclusão
+  const btn = document.getElementById('modal-complete-btn');
+  const st = getDayStatus(n);
+  btn.disabled = false;
+  if (st === 'done') {
+    if (canUncheck(n)) {
+      btn.className = 'w-full py-3.5 px-4 rounded-xl font-bold bg-slate-700 text-slate-300 hover:bg-slate-600 transition';
+      btn.textContent = '✓ Dia concluído (toque para desmarcar)';
+    } else {
+      btn.className = 'w-full py-3.5 px-4 rounded-xl font-bold bg-slate-800 text-emerald-400 cursor-default';
+      btn.textContent = `✓ Concluído em ${formatDateBR(appState.completionDates[n])}`;
+      btn.disabled = true;
+    }
   } else {
-    completeBtn.className = "w-full py-3.5 px-4 rounded-xl font-bold bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-lg shadow-emerald-500/25 hover:opacity-95 transition transform active:scale-95";
-    completeBtn.innerText = "🎉 Marcar Dia como Concluído!";
-    completeBtn.onclick = () => toggleCompleteDay(dayNumber);
+    btn.className =
+      'w-full py-3.5 px-4 rounded-xl font-bold bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-lg shadow-emerald-500/25 hover:opacity-95 transition active:scale-95';
+    btn.textContent = '🎉 Marcar dia como concluído!';
   }
+  btn.onclick = () => toggleCompleteDay(n);
 
-  // Resetar o timer de treino
   resetWorkoutTimer();
-
-  modal.classList.remove('hidden');
+  document.getElementById('day-modal').classList.remove('hidden');
 }
 
 function closeDayModal() {
-  const modal = document.getElementById('day-modal');
-  modal.classList.add('hidden');
+  document.getElementById('day-modal').classList.add('hidden');
   stopWorkoutTimer();
-  stopActiveRecording();
-  stopActivePlayback();
-  window.speechSynthesis.cancel();
+  Gravacoes.stop();
+  Gravacoes.stopPlayback();
 }
 
-function toggleCompleteDay(dayNumber) {
-  const index = appState.completedDays.indexOf(dayNumber);
-  const today = new Date().toISOString().split('T')[0];
-
-  if (index > -1) {
-    // Desmarcar
-    appState.completedDays.splice(index, 1);
-  } else {
-    // Marcar como concluído
-    appState.completedDays.push(dayNumber);
+function toggleCompleteDay(n) {
+  const st = getDayStatus(n);
+  if (st === 'done') {
+    if (!canUncheck(n)) return;
+    appState.completedDays = appState.completedDays.filter((d) => d !== n);
+    delete appState.completionDates[n];
+  } else if (st === 'open') {
+    appState.completedDays.push(n);
     appState.completedDays.sort((a, b) => a - b);
-
-    // Atualiza Streak
-    if (appState.lastCompletedDate !== today) {
-      appState.streak += 1;
-      appState.lastCompletedDate = today;
-    }
-
-    // Tocar comemoração e soltar confetes
+    appState.completionDates[n] = todayKey();
     SoundFX.playCelebration();
     triggerConfetti();
+    if (n === TOTAL_DIAS) setTimeout(openCertificateModal, 900);
+    else if ((CFG.modoLiberacao || 'diario') === 'diario') showToast('🔥 Treino concluído! O próximo libera amanhã.');
+  } else {
+    return;
   }
-
   saveState();
   closeDayModal();
 }
 
-// Síntese de voz com dicção clara para a frase
-function playTrainingSpeech(text, customAudio) {
-  if (customAudio && customAudio.trim() !== '') {
-    const audio = new Audio(customAudio);
-    audio.play().catch(e => console.log('Audio file fallback:', e));
-    return;
-  }
-
-  if ('speechSynthesis' in window) {
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'pt-BR';
-    utterance.rate = 0.85; // Velocidade ligeiramente pausada para clareza
-    utterance.pitch = 1.0;
-    window.speechSynthesis.speak(utterance);
-  }
-}
-
 // ==========================================
-// CRONÔMETRO INTERATIVO DE TREINO (60s)
+// CRONÔMETRO DE PRÁTICA (60s)
 // ==========================================
 let timerInterval = null;
 let timerSeconds = 60;
-let isTimerRunning = false;
 
 function toggleWorkoutTimer() {
-  if (isTimerRunning) {
-    stopWorkoutTimer();
-  } else {
-    startWorkoutTimer();
-  }
+  if (timerInterval) stopWorkoutTimer();
+  else startWorkoutTimer();
 }
 
 function startWorkoutTimer() {
-  isTimerRunning = true;
-  document.getElementById('timer-btn').innerText = "Pausar";
-  document.getElementById('timer-btn').classList.replace('bg-indigo-600', 'bg-amber-600');
-
+  if (timerSeconds <= 0) timerSeconds = 60;
+  const btn = document.getElementById('timer-btn');
+  btn.textContent = 'Pausar';
+  btn.classList.replace('bg-indigo-600', 'bg-amber-600');
   timerInterval = setInterval(() => {
-    if (timerSeconds > 0) {
-      timerSeconds--;
-      updateTimerDisplay();
-      SoundFX.playTick();
-    } else {
+    timerSeconds--;
+    updateTimerDisplay();
+    if (timerSeconds <= 0) {
       stopWorkoutTimer();
       SoundFX.playCelebration();
+      showToast('⏱️ 60 segundos concluídos!');
+    } else if (timerSeconds <= 5) {
+      SoundFX.playTick();
     }
   }, 1000);
 }
 
 function stopWorkoutTimer() {
   clearInterval(timerInterval);
-  isTimerRunning = false;
+  timerInterval = null;
   const btn = document.getElementById('timer-btn');
   if (btn) {
-    btn.innerText = "Iniciar 60s";
+    btn.textContent = 'Iniciar';
     btn.classList.replace('bg-amber-600', 'bg-indigo-600');
   }
 }
@@ -636,300 +397,286 @@ function resetWorkoutTimer() {
 
 function updateTimerDisplay() {
   const el = document.getElementById('timer-display');
-  if (el) el.innerText = `${timerSeconds}s`;
+  if (el) el.textContent = `${timerSeconds}s`;
 }
 
 // ==========================================
-// SEÇÃO: TRAVA-LÍNGUAS (COM GRAVADOR & REGRAVAR)
+// MINHA EVOLUÇÃO (ANTES x DEPOIS)
+// ==========================================
+function renderEvolucao() {
+  const box = document.getElementById('evolucao-card');
+  if (!box) return;
+
+  if (!Gravacoes.has('dia-1')) {
+    box.innerHTML = '';
+    return;
+  }
+
+  let latest = null;
+  for (let n = TOTAL_DIAS; n > 1; n--) {
+    if (Gravacoes.has(`dia-${n}`)) {
+      latest = n;
+      break;
+    }
+  }
+
+  box.innerHTML = `
+    <div class="p-4 rounded-3xl bg-slate-800/70 border border-slate-700/70 mb-6">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-sm font-extrabold text-slate-100 flex items-center gap-2"><span>📈</span><span>Minha Evolução</span></h2>
+        <span class="text-[11px] text-slate-400">Antes x Depois</span>
+      </div>
+      <div class="grid grid-cols-2 gap-2">
+        <div>
+          <p class="text-[11px] font-bold text-slate-400 uppercase mb-1.5">Dia 1 (antes)</p>
+          <div data-rec-slot="dia-1" data-rec-variant="play"></div>
+        </div>
+        <div>
+          <p class="text-[11px] font-bold text-emerald-400 uppercase mb-1.5">${latest ? `Dia ${latest} (agora)` : 'Agora'}</p>
+          ${
+            latest
+              ? `<div data-rec-slot="dia-${latest}" data-rec-variant="play"></div>`
+              : '<div class="py-2.5 px-3 rounded-xl bg-slate-900/60 border border-dashed border-slate-700 text-slate-500 text-[11px] text-center">Grave nos próximos dias</div>'
+          }
+        </div>
+      </div>
+      <p class="text-[11px] text-slate-400 mt-2.5">Ouça as duas gravações em sequência e perceba a diferença na clareza da sua fala.</p>
+    </div>`;
+  Gravacoes.refresh('dia-1');
+  if (latest) Gravacoes.refresh(`dia-${latest}`);
+}
+
+// ==========================================
+// CERTIFICADO DE CONCLUSÃO
+// ==========================================
+function renderCertificadoCard() {
+  const box = document.getElementById('certificado-card');
+  if (!box) return;
+  if (!isDone(TOTAL_DIAS)) {
+    box.innerHTML = '';
+    return;
+  }
+  box.innerHTML = `
+    <button onclick="openCertificateModal()" class="w-full mb-6 p-4 rounded-3xl bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 text-left shadow-lg shadow-amber-500/20 active:scale-[0.98] transition flex items-center gap-3">
+      <span class="text-3xl">🎓</span>
+      <span class="flex-1">
+        <span class="block font-black text-sm">Desafio concluído! Parabéns!</span>
+        <span class="block text-xs font-semibold opacity-80">Toque para gerar e compartilhar seu certificado</span>
+      </span>
+      <span class="text-xl">›</span>
+    </button>`;
+}
+
+let certificateBlob = null;
+
+async function openCertificateModal() {
+  const input = document.getElementById('cert-name');
+  input.value = appState.userName || '';
+  document.getElementById('certificate-modal').classList.remove('hidden');
+  await updateCertificatePreview();
+}
+
+function closeCertificateModal() {
+  document.getElementById('certificate-modal').classList.add('hidden');
+}
+
+async function updateCertificatePreview() {
+  const name = document.getElementById('cert-name').value.trim();
+  if (name && name !== appState.userName) {
+    appState.userName = name;
+    saveState();
+  }
+  if (document.fonts && document.fonts.ready) await document.fonts.ready;
+  const canvas = drawCertificate(name || 'Aluno(a)');
+  document.getElementById('cert-preview').src = canvas.toDataURL('image/png');
+  certificateBlob = await new Promise((r) => canvas.toBlob(r, 'image/png'));
+}
+
+function drawCertificate(name) {
+  const c = document.createElement('canvas');
+  c.width = 1080;
+  c.height = 1350;
+  const g = c.getContext('2d');
+  const font = '"Plus Jakarta Sans", system-ui, sans-serif';
+
+  const bg = g.createLinearGradient(0, 0, 1080, 1350);
+  bg.addColorStop(0, '#1e1b4b');
+  bg.addColorStop(0.55, '#312e81');
+  bg.addColorStop(1, '#581c87');
+  g.fillStyle = bg;
+  g.fillRect(0, 0, 1080, 1350);
+
+  g.strokeStyle = 'rgba(255,255,255,0.25)';
+  g.lineWidth = 4;
+  g.strokeRect(50, 50, 980, 1250);
+  g.strokeStyle = 'rgba(251,191,36,0.6)';
+  g.lineWidth = 2;
+  g.strokeRect(70, 70, 940, 1210);
+
+  g.textAlign = 'center';
+  g.fillStyle = '#ffffff';
+  g.font = `120px ${font}`;
+  g.fillText('🎓', 540, 260);
+
+  g.fillStyle = '#fbbf24';
+  g.font = `800 42px ${font}`;
+  g.fillText('CERTIFICADO DE CONCLUSÃO', 540, 370);
+
+  g.fillStyle = '#c7d2fe';
+  g.font = `500 36px ${font}`;
+  g.fillText('Certificamos que', 540, 480);
+
+  let size = 86;
+  g.fillStyle = '#ffffff';
+  do {
+    g.font = `800 ${size}px ${font}`;
+    size -= 4;
+  } while (g.measureText(name).width > 880 && size > 36);
+  g.fillText(name, 540, 600);
+
+  g.strokeStyle = 'rgba(251,191,36,0.8)';
+  g.lineWidth = 3;
+  g.beginPath();
+  g.moveTo(240, 640);
+  g.lineTo(840, 640);
+  g.stroke();
+
+  g.fillStyle = '#e0e7ff';
+  g.font = `500 38px ${font}`;
+  g.fillText('concluiu com sucesso o', 540, 730);
+  g.fillStyle = '#fbbf24';
+  g.font = `800 46px ${font}`;
+  g.fillText('Desafio de 21 Dias de Dicção', 540, 800);
+  g.fillStyle = '#e0e7ff';
+  g.font = `500 34px ${font}`;
+  g.fillText('treinando articulação, ritmo, respiração', 540, 880);
+  g.fillText('e projeção de voz.', 540, 930);
+
+  g.fillStyle = '#a5b4fc';
+  g.font = `700 32px ${font}`;
+  g.fillText(`21 dias • ${appState.completedDays.length} treinos concluídos`, 540, 1040);
+  const endDate = appState.completionDates[TOTAL_DIAS] || todayKey();
+  g.font = `500 30px ${font}`;
+  g.fillText(`Concluído em ${formatDateBR(endDate)}`, 540, 1095);
+
+  g.fillStyle = '#ffffff';
+  g.font = `800 36px ${font}`;
+  g.fillText(`🎙️ ${CFG.nomeApp}`, 540, 1215);
+  return c;
+}
+
+function downloadCertificate() {
+  if (!certificateBlob) return;
+  const url = URL.createObjectURL(certificateBlob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'certificado-desafio-21-dias.png';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+async function shareCertificate() {
+  if (!certificateBlob) return;
+  const file = new File([certificateBlob], 'certificado-desafio-21-dias.png', { type: 'image/png' });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({
+        files: [file],
+        title: 'Concluí o Desafio de 21 Dias de Dicção!',
+        text: `Concluí o Desafio de 21 Dias de Dicção no ${CFG.nomeApp}! 🎙️🎓`
+      });
+    } catch (e) {
+      /* usuário cancelou */
+    }
+  } else {
+    downloadCertificate();
+    showToast('Imagem baixada! Agora é só postar 😉');
+  }
+}
+
+// ==========================================
+// TRAVA-LÍNGUAS
 // ==========================================
 let travaLinguasFilter = 'todos';
-const tlRecordMap = {}; // { [id]: { state: 'idle'|'recording'|'recorded', blob, url, seconds, isPlaying } }
-let activeTLRecordingId = null;
-let tlMediaRecorder = null;
-let tlAudioStream = null;
-let tlRecordedChunks = [];
-let tlVoiceTimerInterval = null;
-let tlRecordSeconds = 0;
-let activeTLAudioEl = null;
-let activeTLPlayingId = null;
 
-function resetTLRecording(id) {
-  if (tlRecordMap[id]) {
-    if (tlRecordMap[id].url) {
-      URL.revokeObjectURL(tlRecordMap[id].url);
-    }
-    delete tlRecordMap[id];
-  }
-  if (activeTLPlayingId === id && activeTLAudioEl) {
-    activeTLAudioEl.pause();
-    activeTLAudioEl = null;
-    activeTLPlayingId = null;
-  }
-  renderTravaLinguas();
-}
-
-function handleTLRecordAction(id) {
-  const current = tlRecordMap[id] || { state: 'idle' };
-
-  if (current.state === 'idle') {
-    if (activeTLRecordingId && activeTLRecordingId !== id) {
-      stopTLVoiceRecording(activeTLRecordingId);
-    }
-    startTLVoiceRecording(id);
-  } else if (current.state === 'recording') {
-    stopTLVoiceRecording(id);
-  } else if (current.state === 'recorded') {
-    togglePlayTLRecordedAudio(id);
-  }
-}
-
-async function startTLVoiceRecording(id) {
-  try {
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      alert("Seu navegador não suporta gravação direta.");
-      return;
-    }
-
-    // Parar qualquer gravação ou áudio do treino diário
-    stopActiveRecording();
-    stopActivePlayback();
-    if (activeTLAudioEl) {
-      activeTLAudioEl.pause();
-      activeTLAudioEl = null;
-      activeTLPlayingId = null;
-    }
-
-    tlAudioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-
-    let mimeType = 'audio/webm';
-    if (window.MediaRecorder && MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
-      mimeType = 'audio/webm;codecs=opus';
-    } else if (window.MediaRecorder && MediaRecorder.isTypeSupported('audio/mp4')) {
-      mimeType = 'audio/mp4';
-    } else if (window.MediaRecorder && MediaRecorder.isTypeSupported('audio/ogg')) {
-      mimeType = 'audio/ogg';
-    }
-
-    tlMediaRecorder = new MediaRecorder(tlAudioStream, { mimeType: mimeType });
-    tlRecordedChunks = [];
-    activeTLRecordingId = id;
-    tlRecordSeconds = 0;
-
-    tlRecordMap[id] = {
-      state: 'recording',
-      seconds: 0,
-      blob: null,
-      url: null,
-      isPlaying: false
-    };
-
-    tlMediaRecorder.ondataavailable = (e) => {
-      if (e.data && e.data.size > 0) tlRecordedChunks.push(e.data);
-    };
-
-    tlMediaRecorder.onstop = () => {
-      const blob = new Blob(tlRecordedChunks, { type: mimeType });
-      const url = URL.createObjectURL(blob);
-      tlRecordMap[id] = {
-        state: 'recorded',
-        seconds: tlRecordSeconds,
-        blob: blob,
-        url: url,
-        isPlaying: false
-      };
-      activeTLRecordingId = null;
-      if (tlAudioStream) {
-        tlAudioStream.getTracks().forEach(t => t.stop());
-        tlAudioStream = null;
-      }
-      renderTravaLinguas();
-    };
-
-    tlMediaRecorder.start(200);
-    renderTravaLinguas();
-
-    if (tlVoiceTimerInterval) clearInterval(tlVoiceTimerInterval);
-    tlVoiceTimerInterval = setInterval(() => {
-      tlRecordSeconds++;
-      const recBtn = document.getElementById(`tl-rec-btn-${id}`);
-      if (recBtn) {
-        const mins = Math.floor(tlRecordSeconds / 60);
-        const secs = tlRecordSeconds % 60;
-        recBtn.innerHTML = `<span>⏹️</span> <span>Parar (${mins}:${secs < 10 ? '0' : ''}${secs})</span>`;
-      }
-    }, 1000);
-
-  } catch (err) {
-    console.error("Erro ao acessar microfone:", err);
-    alert("Não foi possível acessar o microfone. Verifique as permissões.");
-  }
-}
-
-function stopTLVoiceRecording(id) {
-  if (tlVoiceTimerInterval) {
-    clearInterval(tlVoiceTimerInterval);
-    tlVoiceTimerInterval = null;
-  }
-  if (tlMediaRecorder && tlMediaRecorder.state !== 'inactive') {
-    tlMediaRecorder.stop();
-  }
-}
-
-function togglePlayTLRecordedAudio(id) {
-  const rec = tlRecordMap[id];
-  if (!rec || !rec.url) return;
-
-  if (activeTLPlayingId === id && activeTLAudioEl && !activeTLAudioEl.paused) {
-    activeTLAudioEl.pause();
-    rec.isPlaying = false;
-    activeTLPlayingId = null;
-    renderTravaLinguas();
-  } else {
-    if (activeTLAudioEl) {
-      activeTLAudioEl.pause();
-      if (activeTLPlayingId && tlRecordMap[activeTLPlayingId]) {
-        tlRecordMap[activeTLPlayingId].isPlaying = false;
-      }
-    }
-    activeTLAudioEl = new Audio(rec.url);
-    activeTLPlayingId = id;
-    rec.isPlaying = true;
-    activeTLAudioEl.onended = () => {
-      rec.isPlaying = false;
-      activeTLPlayingId = null;
-      renderTravaLinguas();
-    };
-    activeTLAudioEl.play().catch(e => console.log('Audio playback error:', e));
-    renderTravaLinguas();
-  }
-}
+const TL_FILTER_ON = 'tl-filter-btn px-3 py-1.5 rounded-full bg-indigo-600 text-white font-bold whitespace-nowrap transition';
+const TL_FILTER_OFF = 'tl-filter-btn px-3 py-1.5 rounded-full bg-slate-800 text-slate-300 font-semibold whitespace-nowrap transition';
 
 function renderTravaLinguas() {
   const container = document.getElementById('travalinguas-list');
   if (!container) return;
 
-  const searchVal = (document.getElementById('tl-search')?.value || '').toLowerCase();
-
-  const filtered = APP_CONTEUDO.travaLinguas.filter(item => {
-    const matchSearch = item.titulo.toLowerCase().includes(searchVal) || item.texto.toLowerCase().includes(searchVal);
-    if (!matchSearch) return false;
-
+  const search = (document.getElementById('tl-search')?.value || '').toLowerCase();
+  const list = APP_CONTEUDO.travaLinguas.filter((item) => {
+    const match = item.titulo.toLowerCase().includes(search) || item.texto.toLowerCase().includes(search) || item.fonema.toLowerCase().includes(search);
+    if (!match) return false;
     if (travaLinguasFilter === 'todos') return true;
     if (travaLinguasFilter === 'favoritos') return appState.favoriteTravalinguas.includes(item.id);
-    return item.dificuldade === travaLinguasFilter || item.fonema === travaLinguasFilter;
+    return item.dificuldade === travaLinguasFilter;
   });
 
-  container.innerHTML = '';
-
-  if (filtered.length === 0) {
+  if (list.length === 0) {
     container.innerHTML = `
       <div class="text-center py-12 text-slate-400">
-        <p class="text-3xl mb-2">🔍</p>
-        <p class="font-medium">Nenhum trava-língua encontrado.</p>
-      </div>
-    `;
+        <p class="text-3xl mb-2">${travaLinguasFilter === 'favoritos' ? '⭐' : '🔍'}</p>
+        <p class="font-medium text-sm">${travaLinguasFilter === 'favoritos' ? 'Toque na estrela de um trava-língua para salvá-lo aqui.' : 'Nenhum trava-língua encontrado.'}</p>
+      </div>`;
     return;
   }
 
-  filtered.forEach(item => {
-    const isFav = appState.favoriteTravalinguas.includes(item.id);
-    const recData = tlRecordMap[item.id] || { state: 'idle' };
-    const itemRecState = recData.state;
-    const isPlaying = recData.isPlaying || false;
+  const labels = { facil: 'Fácil', medio: 'Médio', dificil: 'Difícil' };
+  const colors = {
+    facil: 'bg-emerald-500/20 text-emerald-400',
+    medio: 'bg-amber-500/20 text-amber-400',
+    dificil: 'bg-rose-500/20 text-rose-400'
+  };
 
-    const card = document.createElement('div');
-    card.className = "p-5 rounded-2xl bg-slate-800/80 border border-slate-700/70 hover:border-indigo-500/50 transition";
-
-    const badgeColor = item.dificuldade === 'facil' 
-      ? 'bg-emerald-500/20 text-emerald-400' 
-      : item.dificuldade === 'medio' 
-        ? 'bg-amber-500/20 text-amber-400' 
-        : 'bg-rose-500/20 text-rose-400';
-
-    card.innerHTML = `
-      <div class="flex items-center justify-between mb-3">
-        <div class="flex items-center gap-2">
-          <span class="text-xs font-bold uppercase px-2.5 py-0.5 rounded-full ${badgeColor}">
-            ${item.dificuldade}
-          </span>
-          <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-700 text-slate-300">
-            Fonema ${item.fonema}
-          </span>
-        </div>
-        <button onclick="toggleFavoriteTL('${item.id}')" class="text-xl transition transform active:scale-125">
-          ${isFav ? '⭐' : '☆'}
-        </button>
-      </div>
-
-      <h4 class="font-bold text-slate-100 text-base mb-2">${item.titulo}</h4>
-      <p class="text-slate-200 text-sm font-medium leading-relaxed bg-slate-900/60 p-3 rounded-xl border border-slate-700/50 selectable mb-3">
-        "${item.texto}"
-      </p>
-
-      <p class="text-xs text-indigo-300/80 mb-4 flex items-center gap-1.5">
-        <span>💡</span> <span>${item.dica}</span>
-      </p>
-
-      <div class="pt-3 border-t border-slate-700/40 space-y-2">
-        <div class="flex items-center gap-1.5">
-          <!-- Botão Gravar / Parar / Ouvir -->
-          <button id="tl-rec-btn-${item.id}" onclick="handleTLRecordAction('${item.id}')" class="flex-1 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition active:scale-95 shadow ${
-            itemRecState === 'recording'
-              ? 'bg-rose-600 hover:bg-rose-500 text-white animate-pulse'
-              : itemRecState === 'recorded'
-                ? (isPlaying ? 'bg-amber-600 hover:bg-amber-500 text-white' : 'bg-emerald-600 hover:bg-emerald-500 text-white')
-                : 'bg-indigo-600/90 hover:bg-indigo-600 text-white'
-          }">
-            <span>${itemRecState === 'recording' ? '⏹️' : itemRecState === 'recorded' ? (isPlaying ? '⏸️' : '▶️') : '🎙️'}</span>
-            <span>${itemRecState === 'recording' ? 'Parar' : itemRecState === 'recorded' ? (isPlaying ? 'Pausar' : 'Ouvir Minha Voz') : 'Gravar Áudio'}</span>
-          </button>
-
-          <!-- Botão Regravar (Apenas a seta circular ↺ com aviso) -->
-          <button id="tl-reset-btn-${item.id}" onclick="promptResetTLRecord('${item.id}')" title="Regravar trava-língua" class="w-9 h-9 rounded-xl flex items-center justify-center text-lg font-bold transition border active:scale-90 shrink-0 ${
-            itemRecState === 'recorded'
-              ? 'bg-slate-700 hover:bg-slate-600 text-slate-200 border-slate-600'
-              : 'bg-slate-800 text-slate-500 border-slate-700/60 opacity-50 cursor-not-allowed'
-          }">
-            ↺
-          </button>
-
-          <!-- Botão Desafio 3x -->
-          <button onclick="startTLChallenge('${item.id}')" class="py-2 px-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-500/30 text-xs font-bold flex items-center justify-center gap-1 transition active:scale-95 shrink-0">
-            <span>⚡</span> <span>Desafio 3x</span>
-          </button>
-        </div>
-
-        ${itemRecState === 'recorded' ? `
-          <div class="text-[10px] text-emerald-400 font-semibold flex items-center gap-1 px-1">
-            <span>✓</span> <span>Áudio gravado (${recData.seconds || 0}s)</span>
+  container.innerHTML = list
+    .map((item) => {
+      const fav = appState.favoriteTravalinguas.includes(item.id);
+      const best = appState.tlRecords[item.id];
+      return `
+      <div class="p-5 rounded-2xl bg-slate-800/80 border border-slate-700/70">
+        <div class="flex items-center justify-between mb-3">
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-bold uppercase px-2.5 py-0.5 rounded-full ${colors[item.dificuldade]}">${labels[item.dificuldade]}</span>
+            <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-700 text-slate-300">Fonema ${item.fonema}</span>
           </div>
-        ` : ''}
-      </div>
-    `;
+          <button onclick="toggleFavoriteTL('${item.id}')" aria-label="Favoritar" class="text-xl transition active:scale-125">${fav ? '⭐' : '☆'}</button>
+        </div>
+        <h4 class="font-bold text-slate-100 text-base mb-2">${item.titulo}</h4>
+        <p class="text-slate-200 text-sm font-medium leading-relaxed bg-slate-900/60 p-3 rounded-xl border border-slate-700/50 selectable mb-3">"${item.texto}"</p>
+        <p class="text-xs text-indigo-300/80 mb-4 flex items-start gap-1.5"><span>💡</span><span>${item.dica}</span></p>
+        <div class="pt-3 border-t border-slate-700/40 space-y-3">
+          <div data-rec-slot="tl-${item.id}" data-rec-label="${item.titulo}"></div>
+          <div class="flex items-center justify-between gap-2">
+            <span class="text-xs ${best ? 'text-amber-300 font-bold' : 'text-slate-500'}">${best ? `🏆 Recorde: ${best}s` : 'Sem recorde ainda'}</span>
+            <button onclick="startTLChallenge('${item.id}')" class="py-2 px-3 rounded-xl bg-slate-900 hover:bg-slate-700 text-amber-300 border border-amber-500/30 text-xs font-bold flex items-center gap-1 transition active:scale-95">
+              <span>⚡</span><span>Desafio 3x</span>
+            </button>
+          </div>
+        </div>
+      </div>`;
+    })
+    .join('');
 
-    container.appendChild(card);
-  });
+  Gravacoes.refresh();
 }
 
 function filterTravaLinguas(type) {
   travaLinguasFilter = type;
-  document.querySelectorAll('.tl-filter-btn').forEach(btn => {
-    btn.classList.remove('bg-indigo-600', 'text-white');
-    btn.classList.add('bg-slate-800', 'text-slate-300');
+  document.querySelectorAll('.tl-filter-btn').forEach((btn) => {
+    btn.className = btn.id === `filter-tl-${type}` ? TL_FILTER_ON : TL_FILTER_OFF;
   });
-  const activeBtn = document.getElementById(`filter-tl-${type}`);
-  if (activeBtn) {
-    activeBtn.classList.add('bg-indigo-600', 'text-white');
-    activeBtn.classList.remove('bg-slate-800', 'text-slate-300');
-  }
   renderTravaLinguas();
 }
 
 function toggleFavoriteTL(id) {
   const idx = appState.favoriteTravalinguas.indexOf(id);
-  if (idx > -1) {
-    appState.favoriteTravalinguas.splice(idx, 1);
-  } else {
+  if (idx > -1) appState.favoriteTravalinguas.splice(idx, 1);
+  else {
     appState.favoriteTravalinguas.push(id);
     SoundFX.playStar();
   }
@@ -937,186 +684,318 @@ function toggleFavoriteTL(id) {
   renderTravaLinguas();
 }
 
-// Mini cronômetro do desafio 3x
-let tlTimerInterval = null;
-let tlStartTime = null;
+// ---------- Desafio 3x (cronômetro + recorde) ----------
+let challengeId = null;
+let challengeInterval = null;
+let challengeStart = 0;
 
-function startTLChallenge(id) {
-  const item = APP_CONTEUDO.travaLinguas.find(t => t.id === id);
-  if (!item) return;
-
-  const modal = document.getElementById('challenge-modal');
-  document.getElementById('challenge-title').innerText = `Desafio 3x: ${item.titulo}`;
-  document.getElementById('challenge-text').innerText = item.texto;
-  document.getElementById('challenge-timer').innerText = "0.0s";
-  document.getElementById('challenge-action-btn').innerText = "Começar a Falar!";
-  document.getElementById('challenge-action-btn').onclick = () => runTLChallengeTimer();
-
-  modal.classList.remove('hidden');
-}
-
-function runTLChallengeTimer() {
+function setChallengeButton(mode) {
   const btn = document.getElementById('challenge-action-btn');
-  const timerEl = document.getElementById('challenge-timer');
-
-  if (tlTimerInterval) {
-    // Parar timer
-    clearInterval(tlTimerInterval);
-    tlTimerInterval = null;
-    const finalTime = ((Date.now() - tlStartTime) / 1000).toFixed(1);
-    btn.innerText = "Novo Desafio!";
-    btn.onclick = () => runTLChallengeTimer();
-    SoundFX.playCelebration();
-    triggerConfetti();
-    timerEl.innerText = `${finalTime}s 🎉`;
+  const base = 'w-full py-3.5 rounded-xl font-black text-white shadow-lg transition active:scale-95';
+  if (mode === 'running') {
+    btn.className = `${base} bg-rose-600 shadow-rose-600/30`;
+    btn.textContent = 'Parei! (falei 3x)';
   } else {
-    // Iniciar timer
-    tlStartTime = Date.now();
-    btn.innerText = "Parei! (Falei 3x)";
-    btn.classList.replace('bg-indigo-600', 'bg-rose-600');
-    tlTimerInterval = setInterval(() => {
-      const elapsed = ((Date.now() - tlStartTime) / 1000).toFixed(1);
-      timerEl.innerText = `${elapsed}s`;
-    }, 100);
+    btn.className = `${base} bg-indigo-600 shadow-indigo-600/30`;
+    btn.textContent = mode === 'again' ? 'Tentar de novo' : 'Começar a falar!';
   }
 }
 
+function showChallengeBest() {
+  const best = appState.tlRecords[challengeId];
+  document.getElementById('challenge-best').textContent = best ? `🏆 Seu recorde: ${best}s` : 'Primeira tentativa: crie seu recorde!';
+}
+
+function startTLChallenge(id) {
+  const item = APP_CONTEUDO.travaLinguas.find((t) => t.id === id);
+  if (!item) return;
+  clearInterval(challengeInterval);
+  challengeInterval = null;
+  challengeId = id;
+  Gravacoes.stopPlayback();
+
+  document.getElementById('challenge-title').textContent = `Desafio 3x: ${item.titulo}`;
+  document.getElementById('challenge-text').textContent = `"${item.texto}"`;
+  document.getElementById('challenge-timer').textContent = '0.0s';
+  document.getElementById('challenge-result').textContent = '';
+  showChallengeBest();
+  setChallengeButton('start');
+  document.getElementById('challenge-modal').classList.remove('hidden');
+}
+
+function runTLChallengeTimer() {
+  const timerEl = document.getElementById('challenge-timer');
+  const resultEl = document.getElementById('challenge-result');
+
+  if (!challengeInterval) {
+    challengeStart = Date.now();
+    resultEl.textContent = '';
+    setChallengeButton('running');
+    challengeInterval = setInterval(() => {
+      timerEl.textContent = `${((Date.now() - challengeStart) / 1000).toFixed(1)}s`;
+    }, 100);
+    return;
+  }
+
+  clearInterval(challengeInterval);
+  challengeInterval = null;
+  const time = Math.round(((Date.now() - challengeStart) / 1000) * 10) / 10;
+  timerEl.textContent = `${time.toFixed(1)}s`;
+  setChallengeButton('again');
+
+  if (time < 1.5) {
+    resultEl.textContent = 'Rápido demais! Fale as 3 vezes completas 😉';
+    return;
+  }
+
+  const best = appState.tlRecords[challengeId];
+  if (!best || time < best) {
+    appState.tlRecords[challengeId] = time;
+    saveState();
+    resultEl.textContent = best ? `🎉 Novo recorde! (antes: ${best}s)` : '🎉 Recorde registrado!';
+    SoundFX.playCelebration();
+    triggerConfetti();
+  } else {
+    resultEl.textContent = `Boa! Seu recorde continua ${best}s.`;
+  }
+  showChallengeBest();
+  renderTravaLinguas();
+}
+
 function closeChallengeModal() {
-  if (tlTimerInterval) clearInterval(tlTimerInterval);
-  tlTimerInterval = null;
+  clearInterval(challengeInterval);
+  challengeInterval = null;
   document.getElementById('challenge-modal').classList.add('hidden');
 }
 
 // ==========================================
-// SEÇÃO: KIDS
+// KIDS
 // ==========================================
 let kidsCategory = 'bichos';
+const KIDS_BTN_ON = 'kids-cat-btn py-2.5 px-1 text-xs font-black rounded-2xl bg-amber-500 text-white shadow-md transition text-center';
+const KIDS_BTN_OFF = 'kids-cat-btn py-2.5 px-1 text-xs font-bold rounded-2xl bg-white text-slate-600 border border-amber-200 transition text-center';
 
 function switchKidsCategory(cat) {
   kidsCategory = cat;
-  document.querySelectorAll('.kids-cat-btn').forEach(btn => {
-    btn.classList.remove('bg-amber-500', 'text-slate-900', 'font-black');
-    btn.classList.add('bg-slate-800', 'text-slate-300');
+  document.querySelectorAll('.kids-cat-btn').forEach((btn) => {
+    btn.className = btn.id === `kids-btn-${cat}` ? KIDS_BTN_ON : KIDS_BTN_OFF;
   });
-
-  const activeBtn = document.getElementById(`kids-btn-${cat}`);
-  if (activeBtn) {
-    activeBtn.classList.add('bg-amber-500', 'text-slate-900', 'font-black');
-    activeBtn.classList.remove('bg-slate-800', 'text-slate-300');
-  }
-
   renderKidsContent();
 }
 
 function renderKidsContent() {
   const container = document.getElementById('kids-content-list');
   if (!container) return;
+  const source = {
+    bichos: APP_CONTEUDO.kids.exerciciosBichos,
+    respiracao: APP_CONTEUDO.kids.exerciciosRespiracao,
+    travalinguas: APP_CONTEUDO.kids.travalinguasKids
+  }[kidsCategory];
 
-  container.innerHTML = '';
-
-  let items = [];
-  if (kidsCategory === 'bichos') items = APP_CONTEUDO.kids.exerciciosBichos;
-  if (kidsCategory === 'respiracao') items = APP_CONTEUDO.kids.exerciciosRespiracao;
-  if (kidsCategory === 'travalinguas') items = APP_CONTEUDO.kids.travalinguasKids;
-
-  items.forEach(item => {
-    const isDone = appState.completedKids.includes(item.id);
-    const card = document.createElement('div');
-    card.className = "p-5 rounded-3xl bg-gradient-to-br from-slate-800/90 to-slate-900/90 border border-amber-500/30 shadow-lg relative overflow-hidden";
-
-    card.innerHTML = `
-      <div class="flex items-start gap-4">
-        <div class="w-14 h-14 rounded-2xl bg-amber-500/20 border border-amber-400/40 flex items-center justify-center text-3xl shrink-0">
-          ${item.emoji}
-        </div>
-        <div class="flex-1">
-          <div class="flex items-center justify-between mb-1">
-            <h4 class="font-black text-amber-300 text-base">${item.titulo}</h4>
-            <span class="text-xs bg-amber-400/20 text-amber-300 px-2 py-0.5 rounded-full font-bold">+1 ⭐</span>
+  container.innerHTML = source
+    .map((item) => {
+      const done = appState.completedKids.includes(item.id);
+      return `
+      <div class="p-4 rounded-3xl bg-white border-2 ${done ? 'border-emerald-300' : 'border-amber-200'} shadow-sm">
+        <div class="flex items-start gap-3">
+          <div class="w-14 h-14 rounded-2xl bg-amber-100 flex items-center justify-center text-3xl shrink-0">${item.emoji}</div>
+          <div class="flex-1">
+            <div class="flex items-center justify-between mb-1 gap-2">
+              <h4 class="font-black text-slate-800 text-base">${item.titulo}</h4>
+              <span class="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-bold whitespace-nowrap">${done ? '⭐ Ganhou!' : '+1 ⭐'}</span>
+            </div>
+            ${item.beneficio ? `<p class="text-xs text-slate-500 mb-2 font-medium">🎯 ${item.beneficio}</p>` : ''}
+            <p class="text-slate-700 text-sm leading-relaxed mb-3 font-medium">${item.instrucao || `"${item.texto}"`}</p>
+            <button onclick="completeKidsExercise('${item.id}')" class="w-full py-2.5 px-4 rounded-xl text-sm font-black transition active:scale-95 ${
+              done ? 'bg-emerald-500 text-white' : 'bg-gradient-to-r from-amber-400 to-orange-400 text-white shadow-md'
+            }">${done ? '✓ Feito! Fazer de novo' : '🎈 Consegui!'}</button>
           </div>
-          ${item.beneficio ? `<p class="text-xs text-slate-400 mb-2 font-medium">🎯 ${item.beneficio}</p>` : ''}
-          <p class="text-slate-200 text-sm leading-relaxed mb-4 font-medium">
-            ${item.instrucao || `"${item.texto}"`}
-          </p>
-
-          <button onclick="completeKidsExercise('${item.id}', '${(item.instrucao || item.texto).replace(/'/g, "\\'")}')" class="w-full py-2.5 px-4 rounded-xl text-xs font-black transition transform active:scale-95 flex items-center justify-center gap-2 ${
-            isDone 
-              ? 'bg-emerald-600 text-white' 
-              : 'bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 shadow-md shadow-amber-500/20'
-          }">
-            <span>${isDone ? '✓ Concluído!' : '🎈 Concluir Exercício!'}</span>
-          </button>
         </div>
-      </div>
-    `;
+      </div>`;
+    })
+    .join('');
+}
 
-    container.appendChild(card);
+function completeKidsExercise(id) {
+  SoundFX.playStar();
+  if (appState.completedKids.includes(id)) {
+    showToast('Muito bem! Treinar de novo deixa a fala ainda melhor! 🌟');
+    return;
+  }
+  appState.completedKids.push(id);
+  appState.kidsStars += 1;
+  triggerConfetti();
+  saveState();
+  renderKidsContent();
+}
+
+// ==========================================
+// CONFIGURAÇÕES, BACKUP E REINÍCIO
+// ==========================================
+function openSettingsModal() {
+  document.getElementById('settings-name').value = appState.userName || '';
+  const modes = { diario: '1 treino novo por dia', sequencial: 'Libera ao concluir o anterior', livre: 'Todos os dias liberados' };
+  document.getElementById('settings-mode').textContent = modes[CFG.modoLiberacao] || modes.diario;
+  document.getElementById('settings-modal').classList.remove('hidden');
+}
+
+function closeSettingsModal() {
+  const name = document.getElementById('settings-name').value.trim().slice(0, 30);
+  if (name !== appState.userName) {
+    appState.userName = name;
+    saveState();
+  }
+  document.getElementById('settings-modal').classList.add('hidden');
+}
+
+function exportBackup() {
+  const data = { app: 'diccao-pro', version: 1, exportedAt: new Date().toISOString(), state: appState };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `diccao-backup-${todayKey()}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+  showToast('💾 Backup baixado! Guarde o arquivo em local seguro.');
+}
+
+function importBackup(event) {
+  const file = event.target.files && event.target.files[0];
+  event.target.value = '';
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const data = JSON.parse(reader.result);
+      if (data.app !== 'diccao-pro' || !data.state || !Array.isArray(data.state.completedDays)) throw new Error('inválido');
+      appState = Object.assign(JSON.parse(JSON.stringify(DEFAULT_STATE)), data.state, { accessGranted: true, onboarded: true });
+      saveState();
+      renderTravaLinguas();
+      renderKidsContent();
+      closeSettingsModal();
+      showToast('✅ Progresso restaurado com sucesso!');
+    } catch (e) {
+      showToast('❌ Arquivo de backup inválido.');
+    }
+  };
+  reader.readAsText(file);
+}
+
+async function resetProgress() {
+  if (!confirm('Apagar TODO o progresso, recordes, estrelas e gravações? Essa ação não pode ser desfeita.')) return;
+  const keep = { userName: appState.userName, onboarded: true, accessGranted: appState.accessGranted };
+  appState = Object.assign(JSON.parse(JSON.stringify(DEFAULT_STATE)), keep);
+  await Gravacoes.clearAll();
+  saveState();
+  renderTravaLinguas();
+  renderKidsContent();
+  closeSettingsModal();
+  showToast('Progresso reiniciado.');
+}
+
+// ==========================================
+// CÓDIGO DE ACESSO
+// ==========================================
+function needsAccessCode() {
+  return CFG.codigoAcesso && CFG.codigoAcesso.ativo && !appState.accessGranted;
+}
+
+function submitAccessCode(event) {
+  if (event) event.preventDefault();
+  const input = document.getElementById('gate-code');
+  const code = input.value.trim().toUpperCase();
+  const valid = (CFG.codigoAcesso.codigos || []).map((c) => c.trim().toUpperCase());
+  const err = document.getElementById('gate-error');
+
+  if (valid.includes(code)) {
+    appState.accessGranted = true;
+    saveState();
+    document.getElementById('gate').classList.add('hidden');
+    SoundFX.playCelebration();
+    showOnboardingIfNeeded();
+  } else {
+    err.classList.remove('hidden');
+    const card = document.getElementById('gate-card');
+    card.classList.remove('shake');
+    void card.offsetWidth;
+    card.classList.add('shake');
+  }
+}
+
+// ==========================================
+// BOAS-VINDAS (PRIMEIRO ACESSO)
+// ==========================================
+function showOnboardingIfNeeded() {
+  if (!appState.onboarded) document.getElementById('onboarding').classList.remove('hidden');
+}
+
+function finishOnboarding(event) {
+  if (event) event.preventDefault();
+  appState.userName = document.getElementById('onboarding-name').value.trim().slice(0, 30);
+  appState.onboarded = true;
+  saveState();
+  document.getElementById('onboarding').classList.add('hidden');
+  if (!isStandalone()) setTimeout(openInstallModal, 400);
+}
+
+// ==========================================
+// PWA: INSTALAÇÃO (Android + iOS)
+// ==========================================
+function isStandalone() {
+  return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+}
+
+function isIOS() {
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+
+function hideInstallUI() {
+  ['install-btn', 'pwa-install-banner'].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.classList.add('hidden');
   });
 }
 
-function completeKidsExercise(id, spokenText) {
-  if (!appState.completedKids.includes(id)) {
-    appState.completedKids.push(id);
-    appState.kidsStars += 1;
-    SoundFX.playStar();
-    triggerConfetti();
-    saveState();
-    renderKidsContent();
-  } else {
-    // Já fez, apenas reproduz incentivo sonoro
-    SoundFX.playStar();
-  }
-}
-
-// ==========================================
-// PWA: INSTALAÇÃO INTELIGENTE (Android + iOS)
-// ==========================================
 window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault();
   deferredPrompt = e;
-  const installBanner = document.getElementById('pwa-install-banner');
-  if (installBanner) installBanner.classList.remove('hidden');
+  if (!isStandalone()) document.getElementById('pwa-install-banner')?.classList.remove('hidden');
+});
+
+window.addEventListener('appinstalled', () => {
+  hideInstallUI();
+  closeInstallModal();
+  showToast('📲 App instalado! Abra pela tela de início.');
 });
 
 function openInstallModal() {
-  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-  const modal = document.getElementById('install-modal');
-  const iosGuide = document.getElementById('ios-install-guide');
-  const androidGuide = document.getElementById('android-install-guide');
-
-  if (isIOS) {
-    if (iosGuide) iosGuide.classList.remove('hidden');
-    if (androidGuide) androidGuide.classList.add('hidden');
-  } else {
-    if (androidGuide) androidGuide.classList.remove('hidden');
-    if (iosGuide) iosGuide.classList.add('hidden');
-  }
-
-  modal.classList.remove('hidden');
+  const ios = isIOS();
+  document.getElementById('ios-install-guide').classList.toggle('hidden', !ios);
+  document.getElementById('android-install-guide').classList.toggle('hidden', ios);
+  document.getElementById('install-modal').classList.remove('hidden');
 }
 
 function closeInstallModal() {
-  document.getElementById('install-modal').classList.add('hidden');
+  document.getElementById('install-modal')?.classList.add('hidden');
 }
 
 function installPWA() {
-  if (deferredPrompt) {
-    deferredPrompt.prompt();
-    deferredPrompt.userChoice.then((choiceResult) => {
-      if (choiceResult.outcome === 'accepted') {
-        const installBanner = document.getElementById('pwa-install-banner');
-        if (installBanner) installBanner.classList.add('hidden');
-      }
-      deferredPrompt = null;
-    });
-  } else {
-    // Abre guia manual
-    openInstallModal();
+  if (!deferredPrompt) {
+    showToast('Use o menu ⋮ do navegador > "Instalar aplicativo".');
+    return;
   }
+  deferredPrompt.prompt();
+  deferredPrompt.userChoice.then((choice) => {
+    if (choice.outcome === 'accepted') hideInstallUI();
+    deferredPrompt = null;
+  });
 }
 
 // ==========================================
-// EFEITO DE CONFETES (Canvas nativo simples)
+// CONFETES
 // ==========================================
 function triggerConfetti() {
   const canvas = document.getElementById('confetti-canvas');
@@ -1124,67 +1003,71 @@ function triggerConfetti() {
   const ctx = canvas.getContext('2d');
   canvas.width = window.innerWidth;
   canvas.height = window.innerHeight;
-
-  const particles = [];
   const colors = ['#6366f1', '#ec4899', '#10b981', '#f59e0b', '#8b5cf6'];
+  const parts = Array.from({ length: 70 }, () => ({
+    x: canvas.width / 2,
+    y: canvas.height / 2,
+    vx: (Math.random() - 0.5) * 12,
+    vy: (Math.random() - 0.5) * 12 - 4,
+    size: Math.random() * 8 + 4,
+    color: colors[Math.floor(Math.random() * colors.length)],
+    alpha: 1
+  }));
 
-  for (let i = 0; i < 70; i++) {
-    particles.push({
-      x: canvas.width / 2,
-      y: canvas.height / 2,
-      vx: (Math.random() - 0.5) * 12,
-      vy: (Math.random() - 0.5) * 12 - 4,
-      size: Math.random() * 8 + 4,
-      color: colors[Math.floor(Math.random() * colors.length)],
-      alpha: 1
-    });
-  }
-
-  function frame() {
+  (function frame() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    let active = false;
-
-    particles.forEach(p => {
+    let alive = false;
+    parts.forEach((p) => {
       p.x += p.vx;
       p.y += p.vy;
-      p.vy += 0.25; // gravidade
+      p.vy += 0.25;
       p.alpha -= 0.015;
-
       if (p.alpha > 0) {
-        active = true;
-        ctx.fillStyle = p.color;
+        alive = true;
         ctx.globalAlpha = p.alpha;
+        ctx.fillStyle = p.color;
         ctx.fillRect(p.x, p.y, p.size, p.size);
       }
     });
-
-    if (active) {
-      requestAnimationFrame(frame);
-    } else {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-    }
-  }
-  frame();
+    ctx.globalAlpha = 1;
+    if (alive) requestAnimationFrame(frame);
+    else ctx.clearRect(0, 0, canvas.width, canvas.height);
+  })();
 }
 
 // ==========================================
-// INICIALIZAÇÃO GERAL AO CARREGAR
+// INICIALIZAÇÃO
 // ==========================================
 window.addEventListener('DOMContentLoaded', () => {
-  // Registrar Service Worker para PWA
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./sw.js')
-      .then(() => console.log('PWA Service Worker Ativo!'))
-      .catch(err => console.log('SW Error:', err));
+    navigator.serviceWorker.register('./sw.js').catch((err) => console.log('SW error:', err));
   }
 
   loadState();
+  if (isStandalone()) hideInstallUI();
+
+  document.getElementById('legal-notice').textContent = CFG.avisoLegal;
+  document.getElementById('settings-legal').textContent = CFG.avisoLegal;
+  document.getElementById('onboarding-legal').textContent = CFG.avisoLegal;
+  if (CFG.linkSuporte) {
+    const link = document.getElementById('gate-support');
+    link.href = CFG.linkSuporte;
+    link.classList.remove('hidden');
+  }
+
+  if (needsAccessCode()) document.getElementById('gate').classList.remove('hidden');
+  else showOnboardingIfNeeded();
+
+  updateUI();
   renderTravaLinguas();
   renderKidsContent();
+  Gravacoes.loadAll();
 
-  // Busca em tempo real nos trava-línguas
-  const searchInput = document.getElementById('tl-search');
-  if (searchInput) {
-    searchInput.addEventListener('input', () => renderTravaLinguas());
-  }
+  document.getElementById('tl-search')?.addEventListener('input', renderTravaLinguas);
+  document.addEventListener('gravacoes:changed', renderEvolucao);
+
+  // Ao voltar para o app (ex.: no dia seguinte), atualiza liberação e sequência
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') updateUI();
+  });
 });

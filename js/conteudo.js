@@ -10,7 +10,26 @@ const APP_CONTEUDO = {
   config: {
     nomeApp: "Voz & Dicção Pro",
     slogan: "Sua fala clara, confiante e destravada em 21 dias",
-    totalDiasDesafio: 21
+    totalDiasDesafio: 21,
+
+    // Como os dias do desafio são liberados:
+    //  "diario"     -> 1 dia novo por dia (precisa concluir o anterior e esperar o dia seguinte)
+    //  "sequencial" -> libera o próximo assim que concluir o anterior (pode fazer vários no mesmo dia)
+    //  "livre"      -> todos os dias abertos
+    modoLiberacao: "diario",
+
+    // Código de acesso (entregue ao cliente após a compra).
+    // ativo: false desliga a tela de código.
+    // Atenção: é uma barreira simples (fica no código do site), não é segurança forte.
+    codigoAcesso: {
+      ativo: true,
+      codigos: ["DICCAO21", "VOZPRO2026"]
+    },
+
+    // Link de suporte/compra exibido na tela de código (opcional)
+    linkSuporte: "",
+
+    avisoLegal: "Este aplicativo oferece exercícios de treino vocal e não substitui a avaliação ou o acompanhamento de um(a) fonoaudiólogo(a). Em caso de dificuldades persistentes na fala, procure um profissional."
   },
 
   // ==========================================
@@ -28,7 +47,8 @@ const APP_CONTEUDO = {
       passos: [
         "1. Massageie as laterais do rosto (músculo masseter) em círculos com os dedos por 30 segundos.",
         "2. Abra e feche a boca devagar, como em um grande bocejo, soltando o ar com um som suave de 'Aaaaah'.",
-        "3. Faça 5 respirações profundas inflando o abdômen (sem levantar os ombros)."
+        "3. Faça 5 respirações profundas inflando o abdômen (sem levantar os ombros).",
+        "4. Toque em 'Gravar Áudio' e leia a frase de treino. Essa é a sua gravação de ANTES, e no Dia 21 você vai comparar!"
       ],
       fraseTreino: "A aranha arranha a rã. A rã arranha a aranha. Nem a aranha arranha a rã, nem a rã arranha a aranha.",
       audioFile: "" // Coloque aqui "assets/audio/dia1.mp3" quando gravar
@@ -114,11 +134,11 @@ const APP_CONTEUDO = {
       titulo: "Revisão da Semana 1 & Teste de Gravação",
       foco: "Autoavaliação & Conquista",
       duracao: "7 min",
-      dica: "Parabéns por completar sua 1ª semana! Hoje é dia de gravar a sua voz no gravador do celular para comparar depois.",
+      dica: "Parabéns por completar sua 1ª semana! Hoje é dia de gravar a sua voz e perceber a evolução.",
       passos: [
         "1. Faça o aquecimento rápido: 10 estalos de língua + 'Brrrrr' por 10 segundos.",
-        "2. Abra o gravador do seu celular e grave lendo a frase abaixo com naturalidade.",
-        "3. Escute o áudio com atenção e observe onde as palavras podem ficar ainda mais nítidas."
+        "2. Toque em 'Gravar Áudio' aqui embaixo e leia a frase com naturalidade.",
+        "3. Ouça a gravação e compare com a do Dia 1 no card 'Minha Evolução'. Observe onde as palavras podem ficar ainda mais nítidas."
       ],
       fraseTreino: "Quem a paca cara compra, paca cara pagará. Sete sábios sapateiros sapateavam no saguão.",
       audioFile: ""
@@ -331,8 +351,8 @@ const APP_CONTEUDO = {
       dica: "Você chegou ao fim dos 21 dias! Hoje você vai comparar sua gravação com a do Dia 1 e constatar a sua evolução.",
       passos: [
         "1. Faça seu aquecimento de campeão: estalos de língua + caneta por 1 minuto.",
-        "2. Abra o gravador do seu celular e grave o manifesto final.",
-        "3. Ouça o áudio do Dia 1 e este de hoje: veja a diferença brutal de clareza, segurança e presença!"
+        "2. Toque em 'Gravar Áudio' e grave o manifesto final.",
+        "3. Conclua o dia e abra o card 'Minha Evolução': ouça o Dia 1 e o Dia 21 lado a lado e perceba a diferença de clareza, segurança e presença!"
       ],
       fraseTreino: "Eu concluí o Desafio de 21 Dias. Minha fala agora tem clareza, ritmo, postura e poder. Minha voz é a minha melhor ferramenta!",
       audioFile: ""
